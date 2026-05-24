@@ -1,0 +1,1097 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LMDS Architecture Blueprint V5.3</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Sarabun:ital,wght@0,300;0,400;0,500;0,600;0,700&family=JetBrains+Mono:wght@400;500&family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --accent: #542ec8;
+    --accent-light: #7b5ee7;
+    --accent-bg: #f0ecfa;
+    --text-primary: #1d1c1a;
+    --text-muted: #7a766e;
+    --bg-surface: #e2e0da;
+    --bg-page: #f3f2f0;
+    --bg-white: #ffffff;
+    --border-color: #d4d1cb;
+    --code-bg: #f5f3f0;
+    --success: #2d8a4e;
+    --warning: #c27803;
+    --danger: #c42b1c;
+  }
+
+  @page {
+    size: A4;
+    margin: 22mm 20mm 22mm 20mm;
+  }
+
+  @media print {
+    .page-break { page-break-before: always; }
+    .no-break { page-break-inside: avoid; }
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg-white);
+    font-family: 'Sarabun', 'Noto Sans SC', sans-serif;
+    color: var(--text-primary);
+    font-size: 11pt;
+    line-height: 1.7;
+  }
+
+  /* ========== COVER PAGE ========== */
+  .cover-page {
+    width: 100%;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    padding: 60px 50px;
+    position: relative;
+    overflow: hidden;
+    background: var(--bg-white);
+  }
+
+  .cover-deco-top {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 8px;
+    background: linear-gradient(90deg, var(--accent), var(--accent-light));
+  }
+
+  .cover-deco-line {
+    position: absolute;
+    top: 80px;
+    right: 60px;
+    width: 2px;
+    height: 180px;
+    background: var(--accent);
+    opacity: 0.3;
+  }
+
+  .cover-deco-line2 {
+    position: absolute;
+    bottom: 100px;
+    left: 60px;
+    width: 2px;
+    height: 120px;
+    background: var(--accent);
+    opacity: 0.2;
+  }
+
+  .cover-kicker {
+    font-size: 13pt;
+    font-weight: 500;
+    color: var(--accent);
+    letter-spacing: 3pt;
+    text-transform: uppercase;
+    margin-bottom: 24px;
+  }
+
+  .cover-title {
+    font-size: 36pt;
+    font-weight: 700;
+    color: var(--text-primary);
+    text-align: center;
+    line-height: 1.3;
+    margin-bottom: 8px;
+  }
+
+  .cover-subtitle {
+    font-size: 18pt;
+    font-weight: 400;
+    color: var(--text-muted);
+    text-align: center;
+    margin-bottom: 40px;
+    line-height: 1.5;
+  }
+
+  .cover-version {
+    display: inline-block;
+    background: var(--accent-bg);
+    color: var(--accent);
+    font-size: 12pt;
+    font-weight: 600;
+    padding: 6px 24px;
+    border-radius: 4px;
+    margin-bottom: 50px;
+  }
+
+  .cover-summary {
+    max-width: 520px;
+    background: var(--bg-page);
+    border-left: 4px solid var(--accent);
+    padding: 20px 24px;
+    margin-bottom: 50px;
+    font-size: 10.5pt;
+    line-height: 1.7;
+    color: var(--text-muted);
+  }
+
+  .cover-meta {
+    text-align: center;
+    font-size: 10pt;
+    color: var(--text-muted);
+    line-height: 2;
+  }
+
+  .cover-meta span {
+    display: inline-block;
+    margin: 0 12px;
+  }
+
+  /* ========== TOC PAGE ========== */
+  .toc-page {
+    padding: 20px 0;
+  }
+
+  .toc-page h2 {
+    font-size: 20pt;
+    font-weight: 700;
+    color: var(--accent);
+    margin-bottom: 30px;
+    padding-bottom: 10px;
+    border-bottom: 2px solid var(--accent);
+  }
+
+  .toc-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+  }
+
+  .toc-list li {
+    padding: 8px 0;
+    border-bottom: 1px dotted var(--border-color);
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+  }
+
+  .toc-list li.toc-h1 {
+    font-weight: 600;
+    font-size: 11.5pt;
+  }
+
+  .toc-list li.toc-h2 {
+    padding-left: 28px;
+    font-size: 10.5pt;
+    font-weight: 400;
+    color: var(--text-muted);
+  }
+
+  .toc-num {
+    color: var(--accent);
+    font-weight: 600;
+    margin-right: 10px;
+    min-width: 28px;
+  }
+
+  /* ========== BODY CONTENT ========== */
+  .body-content {
+    padding: 0;
+  }
+
+  h1 {
+    font-size: 20pt;
+    font-weight: 700;
+    color: var(--accent);
+    margin-top: 36px;
+    margin-bottom: 16px;
+    padding-bottom: 8px;
+    border-bottom: 2px solid var(--accent-bg);
+  }
+
+  h2 {
+    font-size: 15pt;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-top: 28px;
+    margin-bottom: 12px;
+    padding-left: 12px;
+    border-left: 4px solid var(--accent);
+  }
+
+  h3 {
+    font-size: 12.5pt;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-top: 20px;
+    margin-bottom: 8px;
+  }
+
+  p {
+    margin: 0 0 12px 0;
+    text-align: left;
+  }
+
+  ul, ol {
+    margin: 0 0 12px 0;
+    padding-left: 24px;
+  }
+
+  li {
+    margin-bottom: 4px;
+  }
+
+  strong {
+    font-weight: 600;
+  }
+
+  code {
+    font-family: 'JetBrains Mono', monospace;
+    background: var(--code-bg);
+    padding: 1px 6px;
+    border-radius: 3px;
+    font-size: 9.5pt;
+    color: var(--accent);
+  }
+
+  .code-block {
+    background: var(--code-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    padding: 14px 18px;
+    margin: 12px 0 16px 0;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9pt;
+    line-height: 1.6;
+    overflow-x: auto;
+    white-space: pre-wrap;
+    word-break: break-all;
+  }
+
+  /* ========== TABLES ========== */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 14px 0 18px 0;
+    font-size: 10pt;
+  }
+
+  table thead th {
+    background: var(--accent);
+    color: white;
+    font-weight: 600;
+    padding: 10px 12px;
+    text-align: left;
+    font-size: 10pt;
+  }
+
+  table tbody td {
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--border-color);
+    vertical-align: top;
+  }
+
+  table tbody tr:nth-child(odd) {
+    background: var(--bg-page);
+  }
+
+  table tbody tr:nth-child(even) {
+    background: var(--bg-white);
+  }
+
+  table caption {
+    font-size: 9.5pt;
+    color: var(--text-muted);
+    text-align: center;
+    margin-top: 6px;
+    margin-bottom: 12px;
+  }
+
+  /* ========== CALLOUT BOXES ========== */
+  .callout {
+    border-radius: 6px;
+    padding: 14px 18px;
+    margin: 14px 0 18px 0;
+    font-size: 10.5pt;
+    line-height: 1.65;
+  }
+
+  .callout-info {
+    background: var(--accent-bg);
+    border-left: 4px solid var(--accent);
+    color: var(--text-primary);
+  }
+
+  .callout-warning {
+    background: #fef9ec;
+    border-left: 4px solid var(--warning);
+    color: var(--text-primary);
+  }
+
+  .callout-success {
+    background: #edf7f0;
+    border-left: 4px solid var(--success);
+    color: var(--text-primary);
+  }
+
+  .callout-danger {
+    background: #fdf2f0;
+    border-left: 4px solid var(--danger);
+    color: var(--text-primary);
+  }
+
+  .callout-title {
+    font-weight: 700;
+    margin-bottom: 4px;
+    font-size: 11pt;
+  }
+
+  /* ========== FLOW DIAGRAM ========== */
+  .flow-diagram {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    margin: 20px 0;
+    gap: 0;
+  }
+
+  .flow-step {
+    background: var(--bg-page);
+    border: 1.5px solid var(--border-color);
+    border-radius: 8px;
+    padding: 10px 28px;
+    text-align: center;
+    font-size: 10.5pt;
+    font-weight: 500;
+    min-width: 300px;
+    position: relative;
+  }
+
+  .flow-step.accent {
+    background: var(--accent-bg);
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+
+  .flow-arrow {
+    width: 2px;
+    height: 16px;
+    background: var(--border-color);
+    position: relative;
+  }
+
+  .flow-arrow::after {
+    content: '';
+    position: absolute;
+    bottom: -4px;
+    left: -4px;
+    width: 0;
+    height: 0;
+    border-left: 5px solid transparent;
+    border-right: 5px solid transparent;
+    border-top: 6px solid var(--border-color);
+  }
+
+  /* ========== LAYER CARDS ========== */
+  .layer-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 14px;
+    margin: 14px 0 18px 0;
+  }
+
+  .layer-card {
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    overflow: hidden;
+    page-break-inside: avoid;
+  }
+
+  .layer-card-header {
+    background: var(--accent);
+    color: white;
+    padding: 10px 16px;
+    font-weight: 600;
+    font-size: 11pt;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .layer-card-header .layer-label {
+    background: rgba(255,255,255,0.2);
+    padding: 2px 8px;
+    border-radius: 3px;
+    font-size: 9pt;
+    font-weight: 500;
+  }
+
+  .layer-card-body {
+    padding: 14px 16px;
+    font-size: 10.5pt;
+    line-height: 1.65;
+    background: var(--bg-white);
+  }
+
+  .layer-card-body ul {
+    margin: 4px 0 0 0;
+    padding-left: 18px;
+  }
+
+  .layer-card-body li {
+    margin-bottom: 2px;
+  }
+
+  /* ========== RULE MATRIX ========== */
+  .rule-item {
+    display: flex;
+    gap: 12px;
+    margin: 8px 0;
+    padding: 10px 14px;
+    background: var(--bg-page);
+    border-radius: 6px;
+    page-break-inside: avoid;
+  }
+
+  .rule-num {
+    background: var(--accent);
+    color: white;
+    font-weight: 700;
+    font-size: 10pt;
+    padding: 4px 10px;
+    border-radius: 4px;
+    min-width: 60px;
+    text-align: center;
+    height: fit-content;
+  }
+
+  .rule-content {
+    flex: 1;
+    font-size: 10.5pt;
+    line-height: 1.6;
+  }
+
+  /* ========== TRINITY DIAGRAM ========== */
+  .trinity-diagram {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 24px;
+    margin: 20px 0;
+    flex-wrap: wrap;
+  }
+
+  .trinity-pillar {
+    background: var(--bg-page);
+    border: 2px solid var(--accent-bg);
+    border-radius: 10px;
+    padding: 16px 20px;
+    text-align: center;
+    min-width: 140px;
+    page-break-inside: avoid;
+  }
+
+  .trinity-pillar .pillar-label {
+    font-size: 9pt;
+    color: var(--text-muted);
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 1pt;
+  }
+
+  .trinity-pillar .pillar-name {
+    font-size: 12pt;
+    font-weight: 700;
+    color: var(--accent);
+    margin: 4px 0;
+  }
+
+  .trinity-pillar .pillar-desc {
+    font-size: 9.5pt;
+    color: var(--text-muted);
+  }
+
+  .trinity-plus {
+    font-size: 24pt;
+    font-weight: 300;
+    color: var(--text-muted);
+  }
+
+  .trinity-equals {
+    font-size: 24pt;
+    font-weight: 700;
+    color: var(--accent);
+  }
+
+  .trinity-result {
+    background: var(--accent-bg);
+    border: 2px solid var(--accent);
+    border-radius: 10px;
+    padding: 16px 20px;
+    text-align: center;
+    min-width: 140px;
+    page-break-inside: avoid;
+  }
+
+  .trinity-result .pillar-label {
+    font-size: 9pt;
+    color: var(--accent);
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 1pt;
+  }
+
+  .trinity-result .pillar-name {
+    font-size: 12pt;
+    font-weight: 700;
+    color: var(--accent);
+    margin: 4px 0;
+  }
+
+  .trinity-result .pillar-desc {
+    font-size: 9.5pt;
+    color: var(--text-muted);
+  }
+
+  .section-intro {
+    font-size: 11pt;
+    color: var(--text-muted);
+    font-style: italic;
+    margin-bottom: 16px;
+    line-height: 1.7;
+  }
+
+  /* Print adjustments */
+  @media print {
+    .cover-page { min-height: auto; page-break-after: always; }
+    .toc-page { page-break-after: always; }
+    h1 { page-break-after: avoid; }
+    h2 { page-break-after: avoid; }
+    .layer-card { page-break-inside: avoid; }
+    .rule-item { page-break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ============================================================ -->
+<!-- COVER PAGE -->
+<!-- ============================================================ -->
+<div class="cover-page">
+  <div class="cover-deco-top"></div>
+  <div class="cover-deco-line"></div>
+  <div class="cover-deco-line2"></div>
+
+  <div class="cover-kicker">Architecture Blueprint</div>
+  <div class="cover-title">LMDS<br>Logistics Master Data System</div>
+  <div class="cover-subtitle">เอกสารสถาปัตยกรรมระบบ Master Data<br>สำหรับงานขนส่งและข้อมูลปฏิบัติการ</div>
+  <div class="cover-version">Version 5.3 &mdash; Hybrid Alias Ready</div>
+
+  <div class="cover-summary">
+    เอกสารฉบับนี้รวบรวมสถาปัตยกรรมระบบ LMDS ตั้งแต่เป้าหมายระบบ โครงสร้างข้อมูล สถาปัตยกรรมแบบแยกชั้น กลไก Pipeline การทำงาน ไปจนถึงแนวทางการป้องกันความเสียหาย เพื่อให้นักพัฒนาและทีมปฏิบัติการเข้าใจภาพรวมของระบบได้อย่างครบถ้วน
+  </div>
+
+  <div class="cover-meta">
+    <span>Platform: Google Apps Script + Google Sheets</span>
+    <span>|</span>
+    <span>Core Engine: MatchEngine V5.3</span>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- TABLE OF CONTENTS -->
+<!-- ============================================================ -->
+<div class="toc-page">
+  <h2>สารบัญ</h2>
+  <ul class="toc-list">
+    <li class="toc-h1"><span class="toc-num">1</span> เกี่ยวกับระบบ LMDS</li>
+    <li class="toc-h1"><span class="toc-num">2</span> อัปเดตล่าสุด &mdash; Hybrid Alias Architecture</li>
+    <li class="toc-h1"><span class="toc-num">3</span> เป้าหมายระบบ</li>
+    <li class="toc-h1"><span class="toc-num">4</span> โครงสร้างข้อมูลหลัก</li>
+    <li class="toc-h2">4.1 Master Tables</li>
+    <li class="toc-h2">4.2 Transaction / Operations</li>
+    <li class="toc-h2">4.3 System Tables</li>
+    <li class="toc-h1"><span class="toc-num">5</span> สถาปัตยกรรมแบบแยกชั้น (Layered Architecture)</li>
+    <li class="toc-h2">5.1 Ingestion Layer</li>
+    <li class="toc-h2">5.2 Normalization Layer</li>
+    <li class="toc-h2">5.3 Master Resolution Layer</li>
+    <li class="toc-h2">5.4 Hybrid Alias Layer</li>
+    <li class="toc-h2">5.5 Transaction &amp; Review Layer</li>
+    <li class="toc-h2">5.6 Governance &amp; Hardening Layer</li>
+    <li class="toc-h1"><span class="toc-num">6</span> โมเดลข้อมูลเชิงตรรกะ (Logical Data Model)</li>
+    <li class="toc-h1"><span class="toc-num">7</span> The Trinity Framework</li>
+    <li class="toc-h1"><span class="toc-num">8</span> กระบวนการทำงาน (Execution Flow)</li>
+    <li class="toc-h1"><span class="toc-num">9</span> Global Pipeline Mechanics</li>
+    <li class="toc-h2">9.1 Phase A: Ingestion</li>
+    <li class="toc-h2">9.2 Phase B: Enrichment &amp; Extraction</li>
+    <li class="toc-h2">9.3 Phase C: Rules Matrix Resolution</li>
+    <li class="toc-h2">9.4 Phase D: Persistence Control</li>
+    <li class="toc-h1"><span class="toc-num">10</span> Dependencies Matrix</li>
+    <li class="toc-h1"><span class="toc-num">11</span> การป้องกันความเสียหายและความถูกต้อง (Disaster &amp; Integrity Prevention)</li>
+    <li class="toc-h1"><span class="toc-num">12</span> การติดตั้งและการใช้งาน</li>
+    <li class="toc-h2">12.1 การติดตั้งครั้งแรก (First-time Setup)</li>
+    <li class="toc-h2">12.2 การใช้งานหลัก</li>
+    <li class="toc-h2">12.3 หมายเหตุสำคัญก่อน Production Run</li>
+    <li class="toc-h1"><span class="toc-num">13</span> หมายเหตุการใช้งานจริง (Production Notes)</li>
+  </ul>
+</div>
+
+<!-- ============================================================ -->
+<!-- BODY CONTENT -->
+<!-- ============================================================ -->
+<div class="body-content">
+
+  <!-- Section 1: About LMDS -->
+  <h1>1. เกี่ยวกับระบบ LMDS</h1>
+  <p>
+    LMDS (Logistics Master Data System) คือระบบ Master Data สำหรับงานขนส่งที่ทำหน้าที่รับข้อมูลดิบจากงานประจำวัน ทำความสะอาดข้อมูล (Data Cleansing) จับคู่กับฐาน Master ที่มีอยู่แล้ว (Master Matching) และบันทึกผลเชิงธุรกรรมลงตาราง <code>FACT_DELIVERY</code> เพื่อให้ทีมปฏิบัติการสามารถใช้งานข้อมูลได้อย่างต่อเนื่องและตรวจสอบย้อนหลังได้ ระบบถูกพัฒนาบนแพลตฟอร์ม Google Apps Script ควบคู่กับ Google Sheets ซึ่งช่วยให้สามารถเข้าถึงข้อมูลได้ง่าย แก้ไขได้ทันที และทำงานร่วมกับทีมปฏิบัติการได้อย่างราบรื่น
+  </p>
+  <p>
+    จุดเด่นสำคัญของ LMDS คือการเป็นทั้ง Master Data Repository และ Matching Engine ในระบบเดียวกัน โดยระบบออกแบบมาเพื่อรับมือกับข้อมูลขนส่งที่คุณภาพไม่สม่ำเสมอ อาจมีการพิมพ์ผิด ชื่อไม่ตรงกัน ที่อยู่ไม่ครบ หรือข้อมูลซ้ำซ้อน ระบบจะทำการ Normalize ข้อมูลเหล่านั้น จับคู่กับ Master ที่มีอยู่ และตัดสินใจว่าจะสร้างรายการใหม่ จับคู่อัตโนมัติ หรือส่งเข้าคิวตรวจสอบโดยมนุษย์ (Human-in-the-loop) ตามความเหมาะสม
+  </p>
+
+  <!-- Section 2: Updates -->
+  <h1>2. อัปเดตล่าสุด &mdash; Hybrid Alias Architecture</h1>
+  <p>
+    ในเวอร์ชัน V5.3 ระบบได้เพิ่มแนวทาง <strong>Hybrid Alias Architecture</strong> ซึ่งเป็นการขยายความสามารถในการจับคู่ข้อมูล (Matching) ให้มีประสิทธิภาพมากยิ่งขึ้น โดยเฉพาะในเคสที่ชื่อหรือข้อมูลพิมพ์ไม่ตรงมาตรฐาน ซึ่งเคยเป็นสาเหตุหลักของ False Negative ในระบบเดิม
+  </p>
+
+  <div class="callout callout-success">
+    <div class="callout-title">จุดเปลี่ยนสำคัญของ Hybrid Alias</div>
+    <ul>
+      <li>เพิ่มตารางกลาง <code>M_ALIAS</code> สำหรับจัดการ alias ข้ามโดเมน (Cross-domain Alias Ledger) ทำให้สามารถค้นหา alias ระดับ Global ได้โดยตรง โดยไม่ต้องผ่านตารางย่อยของแต่ละ Entity</li>
+      <li>รองรับ <code>master_uuid</code> ใน <code>M_PERSON</code> และ <code>M_PLACE</code> ซึ่งเป็นตัวเชื่อมระหว่าง Entity เดียวกันที่อาจมีหลายรูปแบบชื่อหรือหลายรายการในตาราง Master</li>
+      <li>เชื่อม Fast-path สำหรับค้นหา alias ระดับ Global ใน Person/Place Candidate Matching ช่วยลดเวลาในการประมวลผลและลดอัตรา False Negative อย่างมีนัยสำคัญ</li>
+    </ul>
+  </div>
+
+  <p>
+    สิ่งสำคัญคือระบบยังคงความเข้ากันได้กับ alias เดิม (<code>M_PERSON_ALIAS</code>, <code>M_PLACE_ALIAS</code>) โดยสมบูรณ์ ทำให้การย้ายระบบ (Migration) สามารถทำได้ทีละส่วนโดยไม่กระทบการทำงานปัจจุบัน นอกจากนี้ ระบบโฟกัสที่การใช้งานกับข้อมูลใหม่ได้ทันที โดยไม่บังคับให้ต้อง Backfill ข้อมูลเก่า ตามนโยบายที่ตกลงกันในรอบปรับปรุงนี้
+  </p>
+
+  <!-- Section 3: System Goals -->
+  <h1>3. เป้าหมายระบบ</h1>
+  <p class="section-intro">LMDS ออกแบบเพื่อเป็น Master Data + Matching Engine สำหรับข้อมูลขนส่งที่คุณภาพไม่สม่ำเสมอ โดยเน้น 3 เสาหลัก:</p>
+
+  <div class="trinity-diagram">
+    <div class="trinity-pillar">
+      <div class="pillar-label">Pillar 1</div>
+      <div class="pillar-name">Data Quality</div>
+      <div class="pillar-desc">คุณภาพข้อมูล<br>ทำความสะอาด ตรวจสอบ<br>Normalize อัตโนมัติ</div>
+    </div>
+    <div class="trinity-plus">+</div>
+    <div class="trinity-pillar">
+      <div class="pillar-label">Pillar 2</div>
+      <div class="pillar-name">Traceability</div>
+      <div class="pillar-desc">การติดตามย้อนหลัง<br>Audit Trail ทุกการตัดสินใจ<br>match_evidence บันทึกไว้</div>
+    </div>
+    <div class="trinity-plus">+</div>
+    <div class="trinity-pillar">
+      <div class="pillar-label">Pillar 3</div>
+      <div class="pillar-name">Operational Continuity</div>
+      <div class="pillar-desc">ความต่อเนื่องปฏิบัติการ<br>ระบบรันได้ทันที<br>ไม่ต้อง Backfill ข้อมูลเก่า</div>
+    </div>
+  </div>
+
+  <p>
+    ทั้งสามเสาหลักนี้ทำงานร่วมกันเพื่อให้มั่นใจว่าข้อมูลที่ผ่านระบบ LMDS จะมีคุณภาพสูง สามารถตรวจสอบย้อนหลังได้ทุกขั้นตอน และทีมปฏิบัติการสามารถใช้งานได้อย่างต่อเนื่องโดยไม่มีการขาดช่วง Data Quality หมายถึงการที่ข้อมูลถูก Normalize ทำความสะอาด และตรวจสอบความถูกต้องก่อนเข้าสู่ระบบ Traceability หมายถึงทุกการตัดสินใจของระบบมีหลักฐานบันทึกไว้สำหรับการตรวจสอบภายหลัง และ Operational Continuity หมายถึงระบบสามารถรันได้ทันทีกับข้อมูลใหม่โดยไม่ต้อง Backfill ข้อมูลเก่า
+  </p>
+
+  <!-- Section 4: Data Structure -->
+  <h1>4. โครงสร้างข้อมูลหลัก</h1>
+
+  <h2>4.1 Master Tables</h2>
+  <p>
+    ตาราง Master เป็นฐานข้อมูลหลักของระบบ LMDS ที่เก็บข้อมูลมาตรฐานสำหรับบุคคล สถานที่ และจุดพิกัด ซึ่งจะถูกใช้เป็นตัวอ้างอิงในการจับคู่ข้อมูลดิบที่เข้ามาในระบบ ข้อมูลในตารางเหล่านี้จะถูกสร้างและปรับปรุงโดย Match Engine โดยอัตโนมัติ หรือผ่านการตรวจสอบโดยมนุษย์ในกรณีที่ระบบไม่สามารถตัดสินใจได้ด้วยตนเอง
+  </p>
+  <table>
+    <thead>
+      <tr><th>ตาราง</th><th>คำอธิบาย</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>M_PERSON</code></td><td>ข้อมูลบุคคลหลัก ประกอบด้วย ชื่อ เบอร์โทร หมายเหตุ และ <code>master_uuid</code> สำหรับเชื่อมโยงข้ามโดเมน</td></tr>
+      <tr><td><code>M_PERSON_ALIAS</code></td><td>Alias ระดับ Local สำหรับบุคคล เก็บชื่อหรือรูปแบบอื่นที่ใช้เรียกบุคคลเดียวกัน</td></tr>
+      <tr><td><code>M_PLACE</code></td><td>ข้อมูลสถานที่หลัก ประกอบด้วย ที่อยู่ ชื่อสถานที่ และ <code>master_uuid</code> สำหรับเชื่อมโยงข้ามโดเมน</td></tr>
+      <tr><td><code>M_PLACE_ALIAS</code></td><td>Alias ระดับ Local สำหรับสถานที่ เก็บชื่อหรือรูปแบบอื่นที่ใช้เรียกสถานที่เดียวกัน</td></tr>
+      <tr><td><code>M_ALIAS</code></td><td>Global Alias Ledger ตารางกลางสำหรับจัดการ alias ข้ามโดเมน รองรับ <code>entity_type</code>, <code>confidence</code>, <code>source</code></td></tr>
+      <tr><td><code>M_GEO_POINT</code></td><td>จุดพิกัด GPS ที่คนขับเช็คอิน พร้อมรัศมี <code>GEO_RADIUS_M</code> สำหรับการจับรัศมีขยะ (Duplicate Location Merging)</td></tr>
+      <tr><td><code>M_DESTINATION</code></td><td>ตารางศูนย์กลางสร้าง Intersection Object Map (Person_ID + Place_ID + Geo_ID = 1 Destination Node)</td></tr>
+    </tbody>
+    <caption>ตารางที่ 1: รายการ Master Tables</caption>
+  </table>
+
+  <h2>4.2 Transaction / Operations</h2>
+  <p>
+    ตารางธุรกรรมและปฏิบัติการเป็นที่เก็บข้อมูลการทำงานจริงของระบบ ตั้งแต่ข้อมูลดิบที่รับเข้ามา ไปจนถึงผลลัพธ์ที่ผ่านการประมวลผลแล้ว ข้อมูลในส่วนนี้มีการเปลี่ยนแปลงตลอดเวลาตามการทำงานของ Pipeline
+  </p>
+  <table>
+    <thead>
+      <tr><th>ตาราง</th><th>คำอธิบาย</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>FACT_DELIVERY</code></td><td>ตารางธุรกรรมหลัก เก็บผลลัพธ์การจัดส่งที่ผ่านการประมวลผลแล้ว ผูกกับ <code>person_id</code>, <code>place_id</code>, <code>geo_id</code>, <code>dest_id</code></td></tr>
+      <tr><td><code>Q_REVIEW</code></td><td>คิวรอตรวจสอบสำหรับเคสกำกวมที่ระบบไม่สามารถตัดสินใจอัตโนมัติได้ รอการตัดสินใจจากมนุษย์</td></tr>
+      <tr><td><code>ตารางงานประจำวัน</code></td><td>ข้อมูลงานรายวันที่ดึงจาก SCG API เป็นแหล่งข้อมูลดิบหลักของระบบ</td></tr>
+      <tr><td><code>SCGนครหลวงJWDภูมิภาค</code></td><td>Landing Sheet สำหรับข้อมูลดิบจาก SCG API ก่อนเข้าสู่กระบวนการประมวลผล</td></tr>
+    </tbody>
+    <caption>ตารางที่ 2: รายการ Transaction / Operations Tables</caption>
+  </table>
+
+  <h2>4.3 System Tables</h2>
+  <p>
+    ตารางระบบเป็นส่วนที่ควบคุมการทำงานภายในของ LMDS ตั้งแต่การตั้งค่าระบบ การบันทึกประวัติ ไปจนถึงข้อมูลภูมิศาสตร์ของประเทศไทยที่ใช้ในการ Normalize ที่อยู่
+  </p>
+  <table>
+    <thead>
+      <tr><th>ตาราง</th><th>คำอธิบาย</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>SYS_CONFIG</code></td><td>ตารางตั้งค่าระบบ เก็บ Configuration ต่างๆ เช่น API Key, พารามิเตอร์การทำงาน</td></tr>
+      <tr><td><code>SYS_LOG</code></td><td>ตารางบันทึกประวัติการทำงานของระบบ (Audit Log) สำหรับการตรวจสอบย้อนหลัง</td></tr>
+      <tr><td><code>SYS_TH_GEO</code></td><td>ฐานข้อมูลภูมิศาสตร์ไทย ประกอบด้วย จังหวัด อำเภอ ตำบล รหัสไปรษณีย์ ประมาณ 7,537 รายการ</td></tr>
+      <tr><td><code>MAPS_CACHE</code></td><td>แคชผลลัพธ์จาก Google Maps API เพื่อลดการเรียก API ซ้ำและประหยัด Quota</td></tr>
+    </tbody>
+    <caption>ตารางที่ 3: รายการ System Tables</caption>
+  </table>
+
+  <!-- Section 5: Layered Architecture -->
+  <h1>5. สถาปัตยกรรมแบบแยกชั้น (Layered Architecture)</h1>
+  <p>
+    LMDS ออกแบบด้วยสถาปัตยกรรมแบบแยกชั้น (Layered Architecture) ที่แบ่งการทำงานออกเป็น 6 ชั้นหลัก แต่ละชั้นมีหน้าที่เฉพาะและทำงานร่วมกันผ่านกระบวนการ Pipeline ที่ชัดเจน การแบ่งชั้นแบบนี้ช่วยให้สามารถปรับปรุงหรือแก้ไขส่วนใดส่วนหนึ่งได้โดยไม่กระทบส่วนอื่น และช่วยให้การตรวจสอบปัญหา (Debugging) ทำได้ง่ายขึ้น เนื่องจากข้อมูลจะไหลผ่านแต่ละชั้นตามลำดับ
+  </p>
+
+  <div class="layer-grid">
+    <div class="layer-card">
+      <div class="layer-card-header">
+        <span class="layer-label">Layer A</span> Ingestion Layer
+      </div>
+      <div class="layer-card-body">
+        <p>ชั้นรับข้อมูลดิบเข้าสู่ระบบ เป็นจุดเริ่มต้นของ Pipeline ทั้งหมด ข้อมูลจะถูกดึงจากแหล่งต่างๆ และวางลงใน Landing Sheets เพื่อเตรียมเข้าสู่กระบวนการประมวลผลในชั้นถัดไป</p>
+        <ul>
+          <li><strong>แหล่งข้อมูล:</strong> SCG API, ไฟล์รายวัน, Input จากผู้ใช้งาน</li>
+          <li><strong>Landing Sheets:</strong> <code>SCGนครหลวงJWDภูมิภาค</code>, <code>ตารางงานประจำวัน</code>, <code>Input</code></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="layer-card">
+      <div class="layer-card-header">
+        <span class="layer-label">Layer B</span> Normalization Layer
+      </div>
+      <div class="layer-card-body">
+        <p>ชั้นทำความสะอาดข้อมูลและปรับรูปแบบให้เป็นมาตรฐานเดียวกัน ข้อมูลดิบที่เข้ามามักมีรูปแบบไม่สม่ำเสมอ ชั้นนี้จะทำให้ข้อมูลพร้อมสำหรับการจับคู่ในชั้นถัดไป</p>
+        <ul>
+          <li><strong>โมดูล:</strong> <code>05_NormalizeService.gs</code>, <code>20_ThGeoService.gs</code></li>
+          <li><strong>งานหลัก:</strong> ทำความสะอาดชื่อ, เบอร์โทร, ที่อยู่, จังหวัด/อำเภอ/ตำบล, รหัสไปรษณีย์</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="layer-card">
+      <div class="layer-card-header">
+        <span class="layer-label">Layer C</span> Master Resolution Layer
+      </div>
+      <div class="layer-card-body">
+        <p>ชั้นจับคู่และตัดสินใจ ข้อมูลที่ผ่านการ Normalize แล้วจะถูกนำมาจับคู่กับฐานข้อมูล Master ที่มีอยู่ แต่ละประเภทข้อมูลมี Service จัดการเฉพาะ และ Match Engine จะเป็นผู้ตัดสินใจสุดท้าย</p>
+        <ul>
+          <li><strong>Person:</strong> <code>06_PersonService.gs</code></li>
+          <li><strong>Place:</strong> <code>07_PlaceService.gs</code></li>
+          <li><strong>Geo:</strong> <code>08_GeoService.gs</code></li>
+          <li><strong>Destination:</strong> <code>09_DestinationService.gs</code></li>
+          <li><strong>Core Decision:</strong> <code>10_MatchEngine.gs</code></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="layer-card">
+      <div class="layer-card-header">
+        <span class="layer-label">Layer D</span> Hybrid Alias Layer (ใหม่)
+      </div>
+      <div class="layer-card-body">
+        <p>ชั้นจัดการ Alias แบบ Hybrid ที่รองรับทั้ง Local Alias (เดิม) และ Global Alias Ledger (ใหม่) ชั้นนี้ช่วยลดปัญหา False Negative ในเคสที่ชื่อหรือข้อมูลไม่ตรงมาตรฐาน โดยเชื่อมโยง Entity เดียวกันที่มีหลายรูปแบบผ่าน <code>master_uuid</code></p>
+        <ul>
+          <li><strong>Local Alias:</strong> <code>M_PERSON_ALIAS</code>, <code>M_PLACE_ALIAS</code></li>
+          <li><strong>Global Alias Ledger:</strong> <code>M_ALIAS</code></li>
+          <li><strong>Cross-domain Identity:</strong> <code>master_uuid</code> ใน <code>M_PERSON</code>, <code>M_PLACE</code></li>
+          <li><strong>Runtime Fast-path:</strong> resolve global alias &rarr; <code>master_uuid</code> &rarr; map &rarr; <code>person_id</code>/<code>place_id</code></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="layer-card">
+      <div class="layer-card-header">
+        <span class="layer-label">Layer E</span> Transaction &amp; Review Layer
+      </div>
+      <div class="layer-card-body">
+        <p>ชั้นบันทึกผลลัพธ์และจัดการเคสที่ต้องตรวจสอบ ข้อมูลที่ผ่านการจับคู่แล้วจะถูกบันทึกลง <code>FACT_DELIVERY</code> ส่วนเคสที่กำกวมจะถูกส่งเข้าคิว <code>Q_REVIEW</code> เพื่อรอการตัดสินใจจากมนุษย์</p>
+        <ul>
+          <li><strong>ธุรกรรม:</strong> ข้อมูลลง <code>FACT_DELIVERY</code></li>
+          <li><strong>คิวรอตรวจ:</strong> เคสคลุมเครือเข้า <code>Q_REVIEW</code></li>
+          <li><strong>Human Decision:</strong> CREATE_NEW / MERGE / IGNORE / ESCALATE</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="layer-card">
+      <div class="layer-card-header">
+        <span class="layer-label">Layer F</span> Governance &amp; Hardening Layer
+      </div>
+      <div class="layer-card-body">
+        <p>ชั้นควบคุมคุณภาพและความมั่นคงของระบบ ประกอบด้วยการตรวจสอบก่อนรัน (Preflight Checks) การบันทึกประวัติ (Audit) การตรวจสอบคุณภาพ (Quality Reporting) และการจัดการ Review</p>
+        <ul>
+          <li><strong>โมดูล:</strong> <code>19_Hardening.gs</code>, <code>12_ReviewService.gs</code>, <code>13_ReportService.gs</code></li>
+          <li><strong>งานหลัก:</strong> Preflight checks, Audit, Log, Quality reporting</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- Section 6: Logical Data Model -->
+  <h1>6. โมเดลข้อมูลเชิงตรรกะ (Logical Data Model)</h1>
+  <p>
+    โมเดลข้อมูลเชิงตรรกะของ LMDS ออกแบบมาเพื่อรองรับความสัมพันธ์ระหว่าง Entity หลักทั้ง 4 ประเภท ได้แก่ บุคคล สถานที่ จุดพิกัด และ Alias โดยมี <code>master_uuid</code> เป็นกุญแจหลักในการเชื่อมโยงข้ามโดเมน และ <code>FACT_DELIVERY</code> เป็นตารางศูนย์กลางที่เก็บผลลัพธ์ธุรกรรมทั้งหมด
+  </p>
+  <table>
+    <thead>
+      <tr><th>Entity</th><th>คอลัมน์สำคัญ</th><th>คำอธิบาย</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>M_PERSON</code></td><td><code>person_id</code>, <code>master_uuid</code>, ...</td><td>ข้อมูลบุคคลหลัก เชื่อมโยงด้วย master_uuid</td></tr>
+      <tr><td><code>M_PLACE</code></td><td><code>place_id</code>, <code>master_uuid</code>, ...</td><td>ข้อมูลสถานที่หลัก เชื่อมโยงด้วย master_uuid</td></tr>
+      <tr><td><code>M_ALIAS</code></td><td><code>alias_id</code>, <code>master_uuid</code>, <code>variant_name</code>, <code>entity_type</code>, <code>confidence</code>, <code>source</code>, <code>created_at</code>, <code>active_flag</code></td><td>Global Alias Ledger สำหรับข้ามโดเมน</td></tr>
+      <tr><td><code>FACT_DELIVERY</code></td><td><code>person_id</code>, <code>place_id</code>, <code>geo_id</code>, <code>dest_id</code>, ...</td><td>ตารางธุรกรรมหลัก ผูกกับทุก Entity</td></tr>
+    </tbody>
+    <caption>ตารางที่ 4: Logical Data Model</caption>
+  </table>
+
+  <div class="callout callout-info">
+    <div class="callout-title">ความสัมพันธ์หลัก</div>
+    <p><code>M_PERSON</code> และ <code>M_PLACE</code> ใช้ <code>master_uuid</code> เชื่อมโยงกับ <code>M_ALIAS</code> ซึ่งเก็บ Variant Name ทั้งหมดของ Entity นั้นๆ ส่วน <code>FACT_DELIVERY</code> อ้างอิงกลับไปยัง <code>person_id</code>, <code>place_id</code>, <code>geo_id</code>, <code>dest_id</code> เพื่อสร้างความสมบูรณ์ของข้อมูลธุรกรรม</p>
+  </div>
+
+  <!-- Section 7: Trinity Framework -->
+  <h1>7. The Trinity Framework</h1>
+  <p>
+    แกนหลักของ LMDS Architecture รันด้วยตรรกะแบบแยกฐานข้อมูลเชิงสัมพันธ์ที่เรียกว่า <strong>"The Trinity Framework"</strong> โดยหลักการคือ การมีอยู่ของการจัดส่ง (Transaction/Fact) 1 ชิ้น จะผูกกันด้วย 3 เสาหลัก บวกกับตารางศูนย์กลางอีก 1 ตาราง ดังนี้
+  </p>
+
+  <div class="trinity-diagram">
+    <div class="trinity-pillar">
+      <div class="pillar-label">WHO</div>
+      <div class="pillar-name">M_PERSON</div>
+      <div class="pillar-desc">กรอง Phone และ Note<br>จากข้อมูล Unstructured<br>เพื่อ Identify บุคคล</div>
+    </div>
+    <div class="trinity-plus">+</div>
+    <div class="trinity-pillar">
+      <div class="pillar-label">WHERE-Address</div>
+      <div class="pillar-name">M_PLACE</div>
+      <div class="pillar-desc">นำ RAW_ADDRESS + RESOLVED_ADDR<br>ประกอบร่าง + สวมชุดข้อมูล<br>ด้วย SYS_TH_GEO</div>
+    </div>
+    <div class="trinity-plus">+</div>
+    <div class="trinity-pillar">
+      <div class="pillar-label">WHERE-Coordinate</div>
+      <div class="pillar-name">M_GEO_POINT</div>
+      <div class="pillar-desc">แกะ Coordinate จากเช็คอิน<br>+ เก็บ GEO_RADIUS_M<br>จับรัศมีขยะ &le; 50m</div>
+    </div>
+    <div class="trinity-equals">=</div>
+    <div class="trinity-result">
+      <div class="pillar-label">Intersection</div>
+      <div class="pillar-name">M_DESTINATION</div>
+      <div class="pillar-desc">Person_ID + Place_ID + Geo_ID<br>= 1 Destination Node</div>
+    </div>
+  </div>
+
+  <p>
+    <strong>M_PERSON (WHO):</strong> ระบบทำการกรอง Phone และ Note (Alias List, Company suffix) จากข้อมูล Unstructured เพื่อ Identify บุคคล ข้อมูลที่เข้ามามักมีเบอร์โทร รหัส หรือหมายเหตุปนอยู่ในฟิลด์ชื่อ ซึ่ง Normalizer จะทำการแยกและจัดเก็บให้เหมาะสม
+  </p>
+  <p>
+    <strong>M_PLACE (WHERE-Address):</strong> นำชื่อจากระบบ SCG (<code>RAW_ADDRESS</code>) รวมกับ <code>RESOLVED_ADDR</code> มาประกอบร่าง และสวมชุดข้อมูลด้วยฐานข้อมูล ปณ. ท้องถิ่น <code>SYS_TH_GEO</code> เพื่อให้ได้ที่อยู่ที่สมบูรณ์และถูกต้องตามมาตรฐาน
+  </p>
+  <p>
+    <strong>M_GEO_POINT (WHERE-Coordinate):</strong> แกะ Coordinate ที่คนขับเช็คอิน และเก็บค่าระยะเผื่อ <code>GEO_RADIUS_M</code> เพื่อทำการ "จับรัศมีขยะ" (Duplicate Location Merging) โดยจุดที่อยู่ในรัศมี 50 เมตร จะถูกจัดเป็นจุดเดียวกัน
+  </p>
+  <p>
+    <strong>M_DESTINATION:</strong> ตารางศูนย์กลางเพื่อสร้าง Intersection Object Map โดย Person_ID + Place_ID + Geo_ID = 1 Destination Node ทำให้สามารถอ้างอิงการจัดส่งได้อย่างชัดเจนและสมบูรณ์
+  </p>
+
+  <!-- Section 8: Execution Flow -->
+  <h1>8. กระบวนการทำงาน (Execution Flow)</h1>
+  <p>
+    กระบวนการทำงานหลักของ LMDS (Happy Path) ดำเนินไปตามลำดับ 6 ขั้นตอน ตั้งแต่การรับข้อมูลดิบเข้าสู่ระบบ จนถึงการเขียนผลลัพธ์ลงฐานข้อมูลและ Auto-enrich Alias แต่ละขั้นตอนมีรายละเอียดดังนี้
+  </p>
+
+  <div class="flow-diagram">
+    <div class="flow-step">1. รับข้อมูลดิบ (Ingestion)</div>
+    <div class="flow-arrow"></div>
+    <div class="flow-step">2. Normalize (ทำความสะอาดข้อมูล)</div>
+    <div class="flow-arrow"></div>
+    <div class="flow-step">3. Resolve Person / Place / Geo</div>
+    <div class="flow-arrow"></div>
+    <div class="flow-step accent">4. ตัดสินใจอัตโนมัติใน Match Engine</div>
+    <div class="flow-arrow"></div>
+    <div class="flow-step">5. เขียนผลลง FACT / ส่งเข้า Q_REVIEW</div>
+    <div class="flow-arrow"></div>
+    <div class="flow-step">6. Auto-enrich Alias จากข้อมูลจริง</div>
+  </div>
+
+  <p>
+    <strong>ขั้นตอนที่ 1 - รับข้อมูลดิบ:</strong> ระบบดึงข้อมูลงานรายวันจาก SCG API และแหล่งอื่นๆ ลง Landing Sheets ข้อมูลที่เข้ามาจะถูกกรองเฉพาะ Record ที่ <code>SYNC_STATUS</code> ยังไม่เป็น SUCCESS
+  </p>
+  <p>
+    <strong>ขั้นตอนที่ 2 - Normalize:</strong> ข้อมูลดิบจะถูกทำความสะอาด ทั้งชื่อ เบอร์โทร ที่อยู่ จังหวัด/อำเภอ/ตำบล และรหัสไปรษณีย์ ข้อมูลที่ไม่ตรงมาตรฐานจะถูกปรับให้อยู่ในรูปแบบเดียวกัน
+  </p>
+  <p>
+    <strong>ขั้นตอนที่ 3 - Resolve:</strong> ข้อมูลที่ผ่านการ Normalize แล้วจะถูกนำไปจับคู่กับ Master ที่มีอยู่ ทั้ง Person, Place และ Geo โดยแต่ละ Service จะทำการค้นหา Candidate ที่ใกล้เคียงที่สุด
+  </p>
+  <p>
+    <strong>ขั้นตอนที่ 4 - Match Engine Decision:</strong> Match Engine จะประเมินผลจากกฎทั้ง 8 ข้อ (Rules Matrix) เพื่อตัดสินใจว่าจะ CREATE_NEW, AUTO_MATCH หรือส่งเข้า REVIEW ตามคะแนน Confidence ที่คำนวณได้
+  </p>
+  <p>
+    <strong>ขั้นตอนที่ 5 - Persistence:</strong> ผลลัพธ์จะถูกเขียนลง <code>FACT_DELIVERY</code> หากตรงกัน หรือส่งเข้า <code>Q_REVIEW</code> หากยังกำกวม การเขียนข้อมูลใช้เทคนิค Batch + RangeList เพื่อลด Overhead ของ API
+  </p>
+  <p>
+    <strong>ขั้นตอนที่ 6 - Auto-enrich Alias:</strong> ระบบจะนำข้อมูลจริงที่ผ่านการยืนยันแล้วมาเพิ่ม Alias ใหม่เข้าสู่ระบบโดยอัตโนมัติ ทำให้การจับคู่ในรอบถัดไปมีประสิทธิภาพมากขึ้น
+  </p>
+
+  <!-- Section 9: Pipeline Mechanics -->
+  <h1>9. Global Pipeline Mechanics</h1>
+  <p>
+    MatchEngine ทำงานบนระบบ Asynchronous Concept ของ Google Apps Script โดยแบ่งการทำงานออกเป็น 4 Phase หลัก ซึ่งแต่ละ Phase มีกลไกการทำงานที่ซับซ้อนและมีการจัดการทรัพยากรอย่างรัดกุมเพื่อรองรับข้อจำกัดของแพลตฟอร์ม GAS
+  </p>
+
+  <h2>9.1 Phase A: Ingestion (SourceRepository.gs)</h2>
+  <p>
+    Phase แรกเป็นการอ่านข้อมูลดิบจาก Landing Sheets โดยมีกลไกสำคัญคือการจำกัดเพดาน Caching เฉพาะ Record ที่ <code>SYNC_STATUS != SUCCESS</code> เท่านั้น ซึ่งช่วยลดปริมาณข้อมูลที่ต้องประมวลผลในแต่ละรอบ หลังจากนั้นระบบจะทำการ Filter และสร้าง Object Context สำหรับแต่ละ Record โดยรวบรวมข้อมูล <code>sysAddr</code> และ <code>rawPlaceName</code> เพื่อส่งต่อไปยัง Phase ถัดไป
+  </p>
+
+  <h2>9.2 Phase B: Enrichment &amp; Extraction (NormalizeService.gs / PlaceService.gs)</h2>
+  <p>
+    Phase ที่สองเป็นการเติมแต่งและสกัดข้อมูล โดยนำ Name เข้า Normalizer เพื่อสกัดเลขรหัส (<code>\b[0-9]{8,}\b</code>) หรือเบอร์โทร (<code>+66..</code>) ข้อมูลที่เป็น "ขยะ" จะไม่ถูกทิ้ง แต่จะถูกนำไป Push Array แยกด้วย Comma ลงคอลัมน์ <code>NOTE</code> เพื่อเก็บไว้เป็น Context สำหรับ Deep Note Search ในภายหลัง
+  </p>
+  <p>
+    สำหรับ Geo Hierarchy Strategy ระบบจะนำ Text มาแกะด้วย Array Regex หรือโค้ดไปรษณีย์ แล้วเข้า Dictionary ในกรณี Fallback (เป็น Plus Code + ภูมิลำเนาแหว่ง) สคริปต์ <code>lookupPlaceAdminById_()</code> ในไฟล์ 07 จะวิ่งเข้ากู้คืน Province &amp; District กลับไปช่วย <code>GeoService.gs</code>
+  </p>
+
+  <h2>9.3 Phase C: Rules Matrix Resolution (10_MatchEngine.gs)</h2>
+  <p>
+    Phase ที่สามเป็นหัวใจของระบบ โดย MatchEngine จะประเมินตามตารางน้ำหนัก 8 กฎหลัก เพื่อตัดสินใจ Action ที่เหมาะสมสำหรับแต่ละ Record กฎที่สำคัญมีดังนี้
+  </p>
+
+  <div class="rule-item">
+    <div class="rule-num">RULE 1</div>
+    <div class="rule-content"><strong>พิกัดหาย:</strong> พิกัดจาก Source หายไป = ดรอปลงเป็น <code>REVIEW_INVALID</code> Confidence: 0 ทันที กฎนี้เป็นกูล็อกที่สำคัญที่สุด เพราะข้อมูลที่ไม่มีพิกัดไม่สามารถนำไปใช้งานได้</div>
+  </div>
+
+  <div class="rule-item">
+    <div class="rule-num">RULE 3.5</div>
+    <div class="rule-content"><strong>Tiered Spatial:</strong> เช็ครัศมีระหว่างจุดปัจจุบันกับจุดใน Master &mdash; ถ้า &lt; 50m ยอมให้ AutoMerge / 50-79.9m ขึ้น Review Warning (สีเหลือง) / 80-100m ขึ้น Warning อ่อน (สีส้ม) / &gt; 100m ถือเป็น Area ใหม่หมด</div>
+  </div>
+
+  <div class="rule-item">
+    <div class="rule-num">RULE 4-7</div>
+    <div class="rule-content"><strong>Scoring:</strong> การ Scoring อิงจากการประเมินของ <em>Dice Coefficient</em> กับ <em>Levenshtein Distance</em> โดยคะแนน &gt; 90 = Auto Match / &lt; 50 = Not Found การตัดสินออกมาเป็น Object State <code>decision.action = CREATE_NEW / AUTO_MATCH / REVIEW</code></div>
+  </div>
+
+  <h2>9.4 Phase D: Persistence Control (Checkpoint &amp; Chunking)</h2>
+  <p>
+    Phase สุดท้ายเป็นการจัดการการเขียนข้อมูลลงฐานข้อมูล โดยมีกลไกสำคัญ 2 ประการ
+  </p>
+  <p>
+    <strong>Batch Writing:</strong> อัด Data เข้า Array ทุกรอบ Batches โดยสาด Record Status ผ่าน <code>RangeList</code> ซึ่งใช้ตัว A1 Notations คอนเวิร์ท Column+Row ลงกระดาน Excel ช่วยลด Overhead API Data Write ไปได้มากถึง 15-25% ของ Execution Time
+  </p>
+  <p>
+    <strong>Execution Time Guard:</strong> สคริปต์จะนับ <code>Date.now()</code> หากเกิน 300,000 มิลลิวินาที (5 นาที) จะเซ็ต Trigger Script สวมวิญญาณ Job ยิงคำสั่งตื่นภายใน 60 วินาที และตัวเอง Kill การทำงาน เพื่อป้องกันอาการค้างหรือ Corrupted Caches ซึ่งเป็นข้อจำกัดที่สำคัญของ Google Apps Script ที่มีเวลา Execution จำกัด
+  </p>
+
+  <!-- Section 10: Dependencies Matrix -->
+  <h1>10. Dependencies Matrix</h1>
+  <p>
+    ระบบ LMDS มี Dependencies ที่สำคัญ 2 ส่วนหลัก ซึ่งมีผลต่อประสิทธิภาพและความเสถียรของระบบโดยรวม การจัดการ Dependencies เหล่านี้อย่างเหมาะสมเป็นปัจจัยสำคัญในการทำให้ระบบสามารถทำงานได้อย่างต่อเนื่องและเสถียร
+  </p>
+
+  <div class="callout callout-info">
+    <div class="callout-title">1. Global Geo Dictionary Cache</div>
+    <p><code>_GLOBAL_GEO_DICT_CACHE</code> (Global Object Array) ป้องกัน I/O DataRead Timeout สำหรับข้อมูลประมวลระดับ 7,537 rows ใน <code>SYS_TH_GEO</code> + 16 Array Data Models (Postcode + Note types) โดยการโหลดข้อมูลเข้า Memory ครั้งเดียวตอนเริ่มระบบ ช่วยลดการอ่าน Sheet ซ้ำซึ่งเป็น Bottleneck หลักของ GAS</p>
+  </div>
+
+  <div class="callout callout-info">
+    <div class="callout-title">2. Google Maps API + Hybrid Cache</div>
+    <p>ใช้บริการ <code>Maps.newDirectionFinder</code> ซึ่ง Google อนุญาตให้ใช้งานในบริบท Scripts ได้ โดยเขียน Hybrid Cache ที่ผสมผสานระหว่าง Memory Cache (6 ชม.) + Physical Google Sheet Logs (Forever) เพื่อป้องกัน Rate Limits และลดต้นทุนการเรียก API</p>
+  </div>
+
+  <!-- Section 11: Disaster & Integrity -->
+  <h1>11. การป้องกันความเสียหายและความถูกต้อง (Disaster &amp; Integrity Prevention)</h1>
+  <p>
+    ระบบ LMDS มีกลไก Audit Traits ฝังอยู่ใน <code>19_Hardening.gs</code> และ Evidence Trace เพื่อรับประกันความถูกต้องและสามารถตรวจสอบย้อนหลังได้ทุกกรณี ข้อมูลมีระดับของ Security และ Integrity ที่สำคัญ 2 ประการดังนี้
+  </p>
+
+  <div class="callout callout-danger">
+    <div class="callout-title">1. Error Handling &amp; Status Reporting</div>
+    <p>หาก SCG API หรือ Pipeline เขียนล้มเหลว คอลัมน์ <code>SYNC_STATUS</code> ต้อง Report = <strong>"ERROR" + Background แดง</strong> เพื่อให้ทีมปฏิบัติการเห็นได้ทันทีว่า Record ใดมีปัญหา และสามารถติดตามแก้ไขได้อย่างรวดเร็ว</p>
+  </div>
+
+  <div class="callout callout-warning">
+    <div class="callout-title">2. Evidence Trace &amp; Backtrace</div>
+    <p>Record ลงฐาน <code>FACT_DELIVERY</code> และตาราง Master ทราบเสมอว่ารหัส ID ชิ้นนั้นมาได้ด้วยอัลกอริทึมใด เนื่องจากติดตรา <code>match_evidence</code> (เช่น <code>name|geo</code>) ไว้ตรวจสอบ Backtrace ภายหลัง ทำให้ทุกการตัดสินใจของระบบมีหลักฐานที่ตรวจสอบย้อนได้</p>
+  </div>
+
+  <!-- Section 12: Installation & Usage -->
+  <h1>12. การติดตั้งและการใช้งาน</h1>
+
+  <h2>12.1 การติดตั้งครั้งแรก (First-time Setup)</h2>
+  <p>
+    การติดตั้งระบบ LMDS เป็นครั้งแรก ประกอบด้วยขั้นตอนหลัก 5 ขั้นตอน ซึ่งต้องดำเนินการตามลำดับ เพื่อให้ระบบพร้อมใช้งานอย่างสมบูรณ์
+  </p>
+  <table>
+    <thead>
+      <tr><th>ขั้นตอน</th><th>รายละเอียด</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><strong>1</strong></td><td>ผูก Apps Script กับ Google Spreadsheet ที่ต้องการใช้งาน</td></tr>
+      <tr><td><strong>2</strong></td><td>ตั้งค่า API Key จากเมนูระบบ เพื่อเชื่อมต่อกับ SCG API และ Google Maps API</td></tr>
+      <tr><td><strong>3</strong></td><td>รันคำสั่งสร้างชีตทั้งหมดตาม SCHEMA ที่กำหนดไว้ใน <code>02_Schema.gs</code></td></tr>
+      <tr><td><strong>4</strong></td><td>เติมข้อมูล <code>SYS_TH_GEO</code> และรันคำสั่งเตรียมดิกชันนารีสำหรับการ Normalize ที่อยู่</td></tr>
+      <tr><td><strong>5</strong></td><td>ทดสอบดึงข้อมูลตัวอย่างและรัน Pipeline 1 รอบ เพื่อยืนยันว่าระบบทำงานถูกต้อง</td></tr>
+    </tbody>
+    <caption>ตารางที่ 5: ขั้นตอนการติดตั้งครั้งแรก</caption>
+  </table>
+
+  <h2>12.2 การใช้งานหลัก</h2>
+  <p>
+    เมื่อระบบติดตั้งเรียบร้อยแล้ว การใช้งานหลักประกอบด้วย 3 กิจกรรมหลัก ที่ทีมปฏิบัติการต้องดำเนินการอย่างสม่ำเสมอเพื่อให้ข้อมูลในระบบมีความถูกต้องและทันสมัยอยู่เสมอ
+  </p>
+  <ul>
+    <li><strong>ดึงงานรายวัน:</strong> ดึงข้อมูลงานรายวันจาก SCG API ลง <code>ตารางงานประจำวัน</code> เพื่อเริ่มกระบวนการประมวลผล</li>
+    <li><strong>รัน Full Pipeline:</strong> รัน Pipeline เต็มรูปแบบเพื่อประมวลผลข้อมูลเข้าฐาน Master + <code>FACT_DELIVERY</code> ระบบจะทำการ Normalize, Resolve, และจับคู่อัตโนมัติ</li>
+    <li><strong>ตรวจ Q_REVIEW:</strong> ตรวจสอบคิว <code>Q_REVIEW</code> เพื่อทำ Human-in-the-loop สำหรับเคสกำกวมที่ระบบไม่สามารถตัดสินใจได้ด้วยตนเอง โดยเลือก Action ที่เหมาะสม (CREATE_NEW / MERGE / IGNORE / ESCALATE)</li>
+  </ul>
+
+  <h2>12.3 หมายเหตุสำคัญก่อน Production Run</h2>
+  <div class="callout callout-warning">
+    <div class="callout-title">ข้อควรระวังก่อนรัน Production</div>
+    <ul>
+      <li>ควรยืนยันว่า Header ทุกชีตตรงกับ <code>SCHEMA</code> ที่กำหนดไว้ใน <code>02_Schema.gs</code> หากไม่ตรง ระบบอาจบันทึกข้อมูลผิดคอลัมน์</li>
+      <li>ควรตรวจว่า <code>M_ALIAS</code> ถูกสร้างแล้วและเรียงคอลัมน์ถูกต้อง เพื่อให้ Hybrid Alias Architecture ทำงานได้อย่างสมบูรณ์</li>
+      <li>ระบบรองรับการรันกับข้อมูลใหม่ได้ทันทีตามแนวทางที่ตกลงกัน โดยไม่จำเป็นต้อง Backfill ข้อมูลเก่า</li>
+    </ul>
+  </div>
+
+  <!-- Section 13: Production Notes -->
+  <h1>13. หมายเหตุการใช้งานจริง (Production Notes)</h1>
+  <p>
+    ข้อควรทราบสำหรับการใช้งานระบบ LMDS ในสภาพแวดล้อมจริง (Production) มีดังต่อไปนี้ เพื่อให้การดำเนินงานเป็นไปอย่างราบรื่นและไม่เกิดปัญหาที่อาจส่งผลกระทบต่อข้อมูลหรือการทำงานของระบบ
+  </p>
+  <ul>
+    <li><strong>ระบบพร้อมรันข้อมูลใหม่แบบเต็มระบบ:</strong> ระบบสามารถรับและประมวลผลข้อมูลใหม่ได้ทันที โดยไม่จำเป็นต้องมีการเตรียมการพิเศษใดๆ สำหรับข้อมูลที่เพิ่งเข้ามา</li>
+    <li><strong>ไม่บังคับ Migration/Backfill ข้อมูลเก่า:</strong> ตามนโยบายรอบนี้ ระบบไม่บังคับให้ต้องย้ายหรือเติมข้อมูลเก่าย้อนหลัง ทำให้สามารถเริ่มใช้งานได้ทันทีโดยไม่กระทบข้อมูลที่มีอยู่เดิม</li>
+    <li><strong>รักษา Header Order:</strong> ต้องรักษาลำดับ Header ให้ตรงกับ Schema เสมอ การเปลี่ยนแปลงลำดับคอลัมน์อาจทำให้ระบบบันทึกข้อมูลผิดตำแหน่ง</li>
+    <li><strong>อัปเดต Config + Schema พร้อมกัน:</strong> ทุกการเปลี่ยนแปลง Schema ควรอัปเดต <code>01_Config.gs</code> และ <code>02_Schema.gs</code> พร้อมกันเสมอ เพื่อให้การตั้งค่าและโครงสร้างข้อมูลสอดคล้องกัน</li>
+  </ul>
+
+</div>
+
+</body>
+</html>
