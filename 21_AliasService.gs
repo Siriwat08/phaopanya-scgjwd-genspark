@@ -94,46 +94,97 @@
  * @return {string|null} aliasId หรือ null ถ้าซ้ำ
  */
 function createGlobalAlias(masterUuid, variantName, entityType, confidence, source) {
-  if (!masterUuid || !variantName || !entityType) return null;
-  const cleanVariant = normalizeForCompare(variantName);
-  if (!cleanVariant || cleanVariant.length < 2) return null;
+  const createdIds = createGlobalAliasesBatch_([{
+    masterUuid: masterUuid,
+    variantName: variantName,
+    entityType: entityType,
+    confidence: confidence,
+    source: source
+  }]);
+  return createdIds.length > 0 ? createdIds[0] : null;
+}
 
-  // ตรวจสอบ duplicate ใน RAM cache ก่อน (เร็วกว่าอ่านชีต)
+/**
+ * createGlobalAliasesBatch_ — สร้าง M_ALIAS แบบ batch สำหรับ Migration/Admin เท่านั้น
+ * ลด appendRow/setValue ในลูป และล้าง cache เพียงครั้งเดียวต่อ batch
+ * @param {Object[]} requests [{masterUuid, variantName, entityType, confidence, source}]
+ * @return {string[]} aliasIds ที่สร้างสำเร็จ
+ */
+function createGlobalAliasesBatch_(requests) {
+  if (!requests || requests.length === 0) return [];
+
   const existingMap = loadGlobalAliasesMap_();
-  const uidKey = entityType + '_' + masterUuid;
-  if (existingMap[uidKey] && existingMap[uidKey].includes(cleanVariant)) {
-    return null; // มีอยู่แล้ว ข้าม
-  }
+  const pendingKeys = {};
+  const rows = [];
+  const aliasIds = [];
+  const now = new Date();
 
-  // เขียนลง M_ALIAS sheet
+  requests.forEach(function(req) {
+    if (!req || !req.masterUuid || !req.variantName || !req.entityType) return;
+
+    const cleanVariant = normalizeForCompare(req.variantName);
+    if (!cleanVariant || cleanVariant.length < 2) return;
+
+    const normalizedType = String(req.entityType).toUpperCase();
+    const uidKey = normalizedType + '_' + req.masterUuid;
+    if (existingMap[uidKey] && existingMap[uidKey].includes(cleanVariant)) return;
+
+    const dedupKey = uidKey + '|' + cleanVariant;
+    if (pendingKeys[dedupKey]) return;
+    pendingKeys[dedupKey] = true;
+
+    const aliasId = generateShortId('A');
+    rows.push(buildGlobalAliasRow_(
+      aliasId,
+      req.masterUuid,
+      req.variantName,
+      normalizedType,
+      req.confidence,
+      req.source,
+      now
+    ));
+    aliasIds.push(aliasId);
+  });
+
+  appendGlobalAliasRows_(rows);
+  if (rows.length > 0) {
+    CacheService.getScriptCache().remove('M_GLOBAL_ALIAS_ALL');
+    CacheService.getScriptCache().remove('M_GLOBAL_ALIAS_REVERSE');
+    logDebug('AliasService', 'createGlobalAliasesBatch_: wrote ' + rows.length + ' aliases');
+  }
+  return aliasIds;
+}
+
+function buildGlobalAliasRow_(aliasId, masterUuid, variantName, entityType, confidence, source, createdAt) {
+  const row = [];
+  row[ALIAS_IDX.ALIAS_ID]     = aliasId;
+  row[ALIAS_IDX.MASTER_UUID]  = masterUuid;
+  row[ALIAS_IDX.VARIANT_NAME] = variantName;
+  row[ALIAS_IDX.ENTITY_TYPE]  = entityType;
+  row[ALIAS_IDX.CONFIDENCE]   = confidence == null ? 100 : confidence;
+  row[ALIAS_IDX.SOURCE]       = source || 'MANUAL';
+  row[ALIAS_IDX.CREATED_AT]   = createdAt || new Date();
+  row[ALIAS_IDX.ACTIVE_FLAG]  = true;
+  return row;
+}
+
+function appendGlobalAliasRows_(rows) {
+  if (!rows || rows.length === 0) return;
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const sheet = ss.getSheetByName(SHEET.M_ALIAS);
-  if (!sheet) return null;
-
-  const aliasId = generateShortId('A');
-  const now = new Date();
-  sheet.appendRow([
-    aliasId,
-    masterUuid,
-    variantName,           // เก็บชื่อดิบไว้ (ยังไม่ normalize)
-    entityType,
-    confidence || 100,
-    source || 'MANUAL',
-    now,
-    true
-  ]);
-
-  // [REMOVED v5.4.001] ไม่เรียก syncAliasToEntityTable_() อีกต่อไป
-  // เพื่อป้องกัน circular dependency (createGlobalAlias → sync → createPersonAlias → createGlobalAlias)
-  // M_PERSON_ALIAS / M_PLACE_ALIAS เขียนที่ autoEnrichAliasesFromFactBatch_() เท่านั้น
-
-  // ล้าง Cache เพื่อให้การค้นหาครั้งถัดไปเห็นข้อมูลใหม่
-  CacheService.getScriptCache().remove('M_GLOBAL_ALIAS_ALL');
-  CacheService.getScriptCache().remove('M_GLOBAL_ALIAS_REVERSE');
-
-  logDebug('AliasService', `createGlobalAlias: ${aliasId} [${entityType}] "${variantName}" → ${masterUuid.substring(0, 8)}... (${source})`);
-  return aliasId;
+  if (!sheet) return;
+  sheet.getRange(sheet.getLastRow() + 1, 1, rows.length, SCHEMA[SHEET.M_ALIAS].length)
+       .setValues(rows);
 }
+
+function ensureAliasMigrationTime_(startTime, stepName) {
+  const safetyMs = 30000;
+  const timeLimitMs = Math.max(60000, (AI_CONFIG.TIME_LIMIT_MS || 300000) - safetyMs);
+  if (new Date() - startTime > timeLimitMs) {
+    throw new Error('Time Guard: หยุดที่ ' + stepName + ' เพื่อป้องกัน GAS timeout — กรุณารันใหม่ต่อภายหลัง');
+  }
+}
+
 
 // ============================================================
 // SECTION 2: loadGlobalAliasesMap_ — โหลดข้อมูล M_ALIAS ทั้งหมดเข้า RAM
@@ -466,85 +517,104 @@ function MIGRATION_HybridAliasSystem() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var startTime = new Date();
 
-  // Step 1: ตรวจสอบ master_uuid
-  logInfo('AliasService', 'Step 1: ตรวจสอบ master_uuid...');
-  var uuidFixed = assignMasterUuidIfMissing();
-  logInfo('AliasService', 'เพิ่ม master_uuid ให้ ' + uuidFixed + ' entities');
+  try {
+    logInfo('AliasService', 'Step 1: ตรวจสอบ master_uuid...');
+    var uuidFixed = assignMasterUuidIfMissing();
+    logInfo('AliasService', 'เพิ่ม master_uuid ให้ ' + uuidFixed + ' entities');
 
-  // ล้าง Cache ทั้งหมดก่อนเริ่ม migration
-  CacheService.getScriptCache().removeAll(['M_PERSON_ALL', 'M_PLACE_ALL', 'M_GLOBAL_ALIAS_ALL', 'M_GLOBAL_ALIAS_REVERSE']);
+    CacheService.getScriptCache().removeAll(['M_PERSON_ALL', 'M_PLACE_ALL', 'M_GLOBAL_ALIAS_ALL', 'M_GLOBAL_ALIAS_REVERSE']);
 
-  var migrateCount = 0;
+    var migrateRequests = [];
 
-  // Step 2: ย้าย M_PERSON_ALIAS → M_ALIAS
-  logInfo('AliasService', 'Step 2: ย้าย M_PERSON_ALIAS → M_ALIAS...');
-  var personAliasSheet = ss.getSheetByName(SHEET.M_PERSON_ALIAS);
-  if (personAliasSheet && personAliasSheet.getLastRow() > 1) {
-    var paData = personAliasSheet.getRange(2, 1, personAliasSheet.getLastRow() - 1, SCHEMA[SHEET.M_PERSON_ALIAS].length).getValues();
-    paData.forEach(function(r) {
-      if (!r[PERSON_ALIAS_IDX.ACTIVE_FLAG]) return;
-      var personId = String(r[PERSON_ALIAS_IDX.PERSON_ID] || '');
-      var aliasName = String(r[PERSON_ALIAS_IDX.ALIAS_NAME] || '');
-      var matchScore = Number(r[PERSON_ALIAS_IDX.MATCH_SCORE] || 100);
-      if (!personId || !aliasName) return;
+    logInfo('AliasService', 'Step 2: ย้าย M_PERSON_ALIAS → M_ALIAS...');
+    var personAliasSheet = ss.getSheetByName(SHEET.M_PERSON_ALIAS);
+    if (personAliasSheet && personAliasSheet.getLastRow() > 1) {
+      var paData = personAliasSheet.getRange(2, 1, personAliasSheet.getLastRow() - 1, SCHEMA[SHEET.M_PERSON_ALIAS].length).getValues();
+      for (var i = 0; i < paData.length; i++) {
+        if (i % 100 === 0) ensureAliasMigrationTime_(startTime, 'M_PERSON_ALIAS row ' + (i + 1));
+        var pr = paData[i];
+        if (!pr[PERSON_ALIAS_IDX.ACTIVE_FLAG]) continue;
+        var personId = String(pr[PERSON_ALIAS_IDX.PERSON_ID] || '');
+        var personAliasName = String(pr[PERSON_ALIAS_IDX.ALIAS_NAME] || '');
+        var personMatchScore = Number(pr[PERSON_ALIAS_IDX.MATCH_SCORE] || 100);
+        if (!personId || !personAliasName) continue;
 
-      var masterUuid = convertPersonIdToUuid(personId);
-      if (masterUuid) {
-        var result = createGlobalAlias(masterUuid, aliasName, 'PERSON', matchScore, 'V52_LEGACY_MIGRATION');
-        if (result) migrateCount++;
+        var personMasterUuid = convertPersonIdToUuid(personId);
+        if (personMasterUuid) {
+          migrateRequests.push({
+            masterUuid: personMasterUuid,
+            variantName: personAliasName,
+            entityType: 'PERSON',
+            confidence: personMatchScore,
+            source: 'V52_LEGACY_MIGRATION'
+          });
+        }
       }
-    });
-  }
+    }
 
-  // Step 3: ย้าย M_PLACE_ALIAS → M_ALIAS
-  logInfo('AliasService', 'Step 3: ย้าย M_PLACE_ALIAS → M_ALIAS...');
-  var placeAliasSheet = ss.getSheetByName(SHEET.M_PLACE_ALIAS);
-  if (placeAliasSheet && placeAliasSheet.getLastRow() > 1) {
-    var plData = placeAliasSheet.getRange(2, 1, placeAliasSheet.getLastRow() - 1, SCHEMA[SHEET.M_PLACE_ALIAS].length).getValues();
-    plData.forEach(function(r) {
-      if (!r[PLACE_ALIAS_IDX.ACTIVE_FLAG]) return;
-      var placeId = String(r[PLACE_ALIAS_IDX.PLACE_ID] || '');
-      var aliasName = String(r[PLACE_ALIAS_IDX.ALIAS_NAME] || '');
-      var matchScore = Number(r[PLACE_ALIAS_IDX.MATCH_SCORE] || 100);
-      if (!placeId || !aliasName) return;
+    logInfo('AliasService', 'Step 3: ย้าย M_PLACE_ALIAS → M_ALIAS...');
+    var placeAliasSheet = ss.getSheetByName(SHEET.M_PLACE_ALIAS);
+    if (placeAliasSheet && placeAliasSheet.getLastRow() > 1) {
+      var plData = placeAliasSheet.getRange(2, 1, placeAliasSheet.getLastRow() - 1, SCHEMA[SHEET.M_PLACE_ALIAS].length).getValues();
+      for (var j = 0; j < plData.length; j++) {
+        if (j % 100 === 0) ensureAliasMigrationTime_(startTime, 'M_PLACE_ALIAS row ' + (j + 1));
+        var plr = plData[j];
+        if (!plr[PLACE_ALIAS_IDX.ACTIVE_FLAG]) continue;
+        var placeId = String(plr[PLACE_ALIAS_IDX.PLACE_ID] || '');
+        var placeAliasName = String(plr[PLACE_ALIAS_IDX.ALIAS_NAME] || '');
+        var placeMatchScore = Number(plr[PLACE_ALIAS_IDX.MATCH_SCORE] || 100);
+        if (!placeId || !placeAliasName) continue;
 
-      var masterUuid = convertPlaceIdToUuid(placeId);
-      if (masterUuid) {
-        var result = createGlobalAlias(masterUuid, aliasName, 'PLACE', matchScore, 'V52_LEGACY_MIGRATION');
-        if (result) migrateCount++;
+        var placeMasterUuid = convertPlaceIdToUuid(placeId);
+        if (placeMasterUuid) {
+          migrateRequests.push({
+            masterUuid: placeMasterUuid,
+            variantName: placeAliasName,
+            entityType: 'PLACE',
+            confidence: placeMatchScore,
+            source: 'V52_LEGACY_MIGRATION'
+          });
+        }
       }
-    });
+    }
+
+    var migrateCount = createGlobalAliasesBatch_(migrateRequests).length;
+
+    ensureAliasMigrationTime_(startTime, 'SCG raw alias import');
+    logInfo('AliasService', 'Step 4: ดึงชื่อจากชีต SCG ดิบ → M_ALIAS...');
+    var scgCount = populateAliasFromSCGRawData_();
+
+    ensureAliasMigrationTime_(startTime, 'FACT alias import');
+    logInfo('AliasService', 'Step 5: ดึงชื่อจาก FACT_DELIVERY → M_ALIAS...');
+    var factCount = populateAliasFromFactDelivery_();
+
+    var elapsedSec = Math.round((new Date() - startTime) / 1000);
+    var totalMigrated = migrateCount + scgCount + factCount;
+
+    logInfo('AliasService',
+      'Migration เสร็จสิ้น: UUID:' + uuidFixed +
+      ' EntityAlias→M_ALIAS:' + migrateCount +
+      ' SCG→M_ALIAS:' + scgCount +
+      ' FACT→M_ALIAS:' + factCount +
+      ' รวม:' + totalMigrated +
+      ' (' + elapsedSec + 's)');
+
+    ui.alert(
+      '✅ Migration เสร็จสิ้น!\n\n' +
+      '• เพิ่ม master_uuid: ' + uuidFixed + ' รายการ\n' +
+      '• Entity Alias → M_ALIAS: ' + migrateCount + ' รายการ\n' +
+      '• SCG Raw → M_ALIAS: ' + scgCount + ' รายการ\n' +
+      '• FACT → M_ALIAS: ' + factCount + ' รายการ\n' +
+      '• รวมทั้งหมด: ' + totalMigrated + ' รายการ\n' +
+      '• ใช้เวลา: ' + elapsedSec + ' วินาที'
+    );
+  } catch (err) {
+    logError('AliasService', 'MIGRATION_HybridAliasSystem ล้มเหลว: ' + err.message, err);
+    ui.alert('❌ Migration หยุดทำงาน: ' + err.message);
+    throw err;
   }
-
-  // Step 4: ดึงชื่อปลายทางจากชีต SCG ดิบ → M_ALIAS
-  logInfo('AliasService', 'Step 4: ดึงชื่อจากชีต SCG ดิบ → M_ALIAS...');
-  var scgCount = populateAliasFromSCGRawData_();
-
-  // Step 5: ดึงชื่อจาก FACT_DELIVERY → M_ALIAS
-  logInfo('AliasService', 'Step 5: ดึงชื่อจาก FACT_DELIVERY → M_ALIAS...');
-  var factCount = populateAliasFromFactDelivery_();
-
-  var elapsedSec = Math.round((new Date() - startTime) / 1000);
-  var totalMigrated = migrateCount + scgCount + factCount;
-
-  logInfo('AliasService',
-    'Migration เสร็จสิ้น: UUID:' + uuidFixed +
-    ' PersonAlias→M_ALIAS:' + migrateCount +
-    ' SCG→M_ALIAS:' + scgCount +
-    ' FACT→M_ALIAS:' + factCount +
-    ' รวม:' + totalMigrated +
-    ' (' + elapsedSec + 's)');
-
-  ui.alert(
-    '✅ Migration เสร็จสิ้น!\n\n' +
-    '• เพิ่ม master_uuid: ' + uuidFixed + ' รายการ\n' +
-    '• PersonAlias → M_ALIAS: ' + migrateCount + ' รายการ\n' +
-    '• SCG Raw → M_ALIAS: ' + scgCount + ' รายการ\n' +
-    '• FACT → M_ALIAS: ' + factCount + ' รายการ\n' +
-    '• รวมทั้งหมด: ' + totalMigrated + ' รายการ\n' +
-    '• ใช้เวลา: ' + elapsedSec + ' วินาที'
-  );
 }
+
 
 // ============================================================
 // SECTION 10: populateAliasFromSCGRawData_ — ดึงจากชีต SCG ดิบ
@@ -559,6 +629,7 @@ function MIGRATION_HybridAliasSystem() {
 function populateAliasFromSCGRawData_() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var sourceSheet = ss.getSheetByName(SHEET.SOURCE);
+  var startTime = new Date();
   if (!sourceSheet || sourceSheet.getLastRow() < 2) {
     logWarn('AliasService', 'ชีต SCG ดิบ ว่างอยู่ — ข้ามการดึงข้อมูล');
     return 0;
@@ -568,7 +639,8 @@ function populateAliasFromSCGRawData_() {
   var data = sourceSheet.getRange(2, 1, sourceSheet.getLastRow() - 1, schemaLen).getValues();
 
   var nameCount = {};  // { normalizeName: { rawName, count } }
-  data.forEach(function(r) {
+  data.forEach(function(r, idx) {
+    if (idx % 500 === 0) ensureAliasMigrationTime_(startTime, 'SCG raw scan row ' + (idx + 1));
     var rawPersonName = String(r[SRC_IDX.RAW_PERSON_NAME] || '').trim();
     if (!rawPersonName || rawPersonName.length < 2) return;
 
@@ -581,16 +653,14 @@ function populateAliasFromSCGRawData_() {
     nameCount[normKey].count++;
   });
 
-  // ดึงข้อมูล M_PERSON ทั้งหมดมาเทียบ
   var allPersons = loadAllPersons_();
-  var personNormMap = {}; // { normalized: masterUuid }
+  var personNormMap = {};
   allPersons.forEach(function(p) {
     if (p.normalized && p.masterUuid) {
       personNormMap[p.normalized] = p.masterUuid;
     }
   });
 
-  // ดึงข้อมูล M_PLACE ทั้งหมดมาเทียบ
   var allPlaces = loadAllPlaces_();
   var placeNormMap = {};
   allPlaces.forEach(function(p) {
@@ -599,22 +669,21 @@ function populateAliasFromSCGRawData_() {
     }
   });
 
-  var aliasCount = 0;
-  for (var normKey in nameCount) {
+  var aliasRequests = [];
+  var keys = Object.keys(nameCount);
+  for (var k = 0; k < keys.length; k++) {
+    if (k % 100 === 0) ensureAliasMigrationTime_(startTime, 'SCG alias match ' + (k + 1));
+    var normKey = keys[k];
     var info = nameCount[normKey];
     var rawName = info.rawName;
-
-    // ลองจับคู่กับ Person ก่อน
     var matchedUuid = personNormMap[normKey];
     var matchedType = 'PERSON';
 
-    // ถ้าไม่เจอ Person ลอง Place
     if (!matchedUuid) {
       matchedUuid = placeNormMap[normKey];
       matchedType = 'PLACE';
     }
 
-    // ถ้ายังไม่เจอ ลอง substring matching
     if (!matchedUuid) {
       for (var pNorm in personNormMap) {
         if (pNorm.length >= 4 && (normKey.includes(pNorm) || pNorm.includes(normKey))) {
@@ -635,14 +704,21 @@ function populateAliasFromSCGRawData_() {
     }
 
     if (matchedUuid) {
-      var result = createGlobalAlias(matchedUuid, rawName, matchedType, 90, 'SCG_RAW_IMPORT');
-      if (result) aliasCount++;
+      aliasRequests.push({
+        masterUuid: matchedUuid,
+        variantName: rawName,
+        entityType: matchedType,
+        confidence: 90,
+        source: 'SCG_RAW_IMPORT'
+      });
     }
   }
 
-  logInfo('AliasService', 'populateAliasFromSCGRawData: ดึง ' + Object.keys(nameCount).length + ' ชื่อไม่ซ้ำ → สร้าง ' + aliasCount + ' alias ใหม่');
+  var aliasCount = createGlobalAliasesBatch_(aliasRequests).length;
+  logInfo('AliasService', 'populateAliasFromSCGRawData: ดึง ' + keys.length + ' ชื่อไม่ซ้ำ → สร้าง ' + aliasCount + ' alias ใหม่');
   return aliasCount;
 }
+
 
 // ============================================================
 // SECTION 11: populateAliasFromFactDelivery_ — ดึงจาก FACT_DELIVERY
@@ -655,13 +731,15 @@ function populateAliasFromSCGRawData_() {
 function populateAliasFromFactDelivery_() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var factSheet = ss.getSheetByName(SHEET.FACT_DELIVERY);
+  var startTime = new Date();
   if (!factSheet || factSheet.getLastRow() < 2) return 0;
 
   var schemaLen = SCHEMA[SHEET.FACT_DELIVERY].length;
   var data = factSheet.getRange(2, 1, factSheet.getLastRow() - 1, schemaLen).getValues();
 
   var nameMap = {}; // { normName: { rawName, personId, placeId } }
-  data.forEach(function(r) {
+  data.forEach(function(r, idx) {
+    if (idx % 500 === 0) ensureAliasMigrationTime_(startTime, 'FACT scan row ' + (idx + 1));
     var rawName = String(r[FACT_IDX.SHIP_TO_NAME] || '').trim();
     var personId = String(r[FACT_IDX.PERSON_ID] || '').trim();
     var placeId = String(r[FACT_IDX.PLACE_ID] || '').trim();
@@ -674,33 +752,45 @@ function populateAliasFromFactDelivery_() {
     }
   });
 
-  var aliasCount = 0;
-  for (var normKey in nameMap) {
-    var info = nameMap[normKey];
+  var aliasRequests = [];
+  var keys = Object.keys(nameMap);
+  for (var i = 0; i < keys.length; i++) {
+    if (i % 100 === 0) ensureAliasMigrationTime_(startTime, 'FACT alias match ' + (i + 1));
+    var info = nameMap[keys[i]];
 
-    // ลอง Person ก่อน
     if (info.personId) {
       var masterUuid = convertPersonIdToUuid(info.personId);
       if (masterUuid) {
-        var result = createGlobalAlias(masterUuid, info.rawName, 'PERSON', 95, 'FACT_DELIVERY_IMPORT');
-        if (result) aliasCount++;
+        aliasRequests.push({
+          masterUuid: masterUuid,
+          variantName: info.rawName,
+          entityType: 'PERSON',
+          confidence: 95,
+          source: 'FACT_DELIVERY_IMPORT'
+        });
         continue;
       }
     }
 
-    // ลอง Place
     if (info.placeId) {
       var masterUuid2 = convertPlaceIdToUuid(info.placeId);
       if (masterUuid2) {
-        var result2 = createGlobalAlias(masterUuid2, info.rawName, 'PLACE', 90, 'FACT_DELIVERY_IMPORT');
-        if (result2) aliasCount++;
+        aliasRequests.push({
+          masterUuid: masterUuid2,
+          variantName: info.rawName,
+          entityType: 'PLACE',
+          confidence: 90,
+          source: 'FACT_DELIVERY_IMPORT'
+        });
       }
     }
   }
 
-  logInfo('AliasService', 'populateAliasFromFactDelivery: ดึง ' + Object.keys(nameMap).length + ' ชื่อไม่ซ้ำ → สร้าง ' + aliasCount + ' alias ใหม่');
+  var aliasCount = createGlobalAliasesBatch_(aliasRequests).length;
+  logInfo('AliasService', 'populateAliasFromFactDelivery: ดึง ' + keys.length + ' ชื่อไม่ซ้ำ → สร้าง ' + aliasCount + ' alias ใหม่');
   return aliasCount;
 }
+
 
 // ============================================================
 // SECTION 12: generateUUID — สร้าง UUID v4

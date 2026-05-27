@@ -344,9 +344,14 @@ function logWarn(module, message) {
   console.warn(`[WARN][${module}] ${message}`);
 }
 
-function logError(module, message) {
-  writeLog_('ERROR', module, message);
-  console.error(`[ERROR][${module}] ${message}`);
+function logError(module, message, err) {
+  const stack = err && err.stack ? String(err.stack) : '';
+  const detail = stack ? stack.substring(0, 1000) : '';
+  const logMessage = stack
+    ? `${message} | ${stack.split('\n')[0]}`
+    : message;
+  writeLog_('ERROR', module, logMessage, detail);
+  console.error(`[ERROR][${module}] ${logMessage}`);
 }
 
 function logDebug(module, message) {
@@ -354,18 +359,22 @@ function logDebug(module, message) {
   console.log(`[DEBUG][${module}] ${message}`);
 }
 
-function writeLog_(level, module, message) {
+function writeLog_(level, module, message, details) {
   try {
     const ss    = SpreadsheetApp.getActiveSpreadsheet();
     const sheet = ss.getSheetByName(SHEET.SYS_LOG);
     if (!sheet) return;
 
-    // Log ID
-    const logId = generateShortId('L');
-    sheet.appendRow([
-      logId, new Date(), module, level,
-      String(message).substring(0, 500), '',
-    ]);
+    const row = [];
+    row[SYS_LOG_IDX.LOG_ID]    = generateShortId('L');
+    row[SYS_LOG_IDX.TIMESTAMP] = new Date();
+    row[SYS_LOG_IDX.MODULE]    = module;
+    row[SYS_LOG_IDX.LEVEL]     = level;
+    row[SYS_LOG_IDX.MESSAGE]   = String(message).substring(0, 500);
+    row[SYS_LOG_IDX.DETAILS]   = String(details || '').substring(0, 1000);
+
+    sheet.getRange(sheet.getLastRow() + 1, 1, 1, SCHEMA[SHEET.SYS_LOG].length)
+         .setValues([row]);
 
     // ล้าง Log เก่าถ้าเกิน 5000 แถว
     if (sheet.getLastRow() > 5001) {

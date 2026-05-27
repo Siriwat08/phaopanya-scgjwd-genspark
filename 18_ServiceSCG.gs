@@ -9,8 +9,11 @@
  *   เป็น Commander ของ Group 2 (Daily Ops)
  * ===================================================
  * CHANGELOG:
+ *   v5.4.002 (2026-05-26) — LMDS hardening:
+ *     - [FIX] ใช้ DATA_IDX แทน hardcoded array indexes ใน aggregation
+ *     - [FIX] ไม่ auto-write M_ALIAS จาก SCG fetch; ให้รัน populateAliasFromSCGRawData_ ผ่านเมนู admin เท่านั้น
  *   v5.4.001 (2026-05-24) — Single Writer Pattern:
- *     - [ADD] fetchDataFromSCGJWD: เรียก populateAliasFromSCGRawData_ หลัง applyMasterCoordinatesToDailyJob
+ *     - [REVIEW] populateAliasFromSCGRawData_ เป็น admin/manual path เท่านั้น ไม่เรียกจาก fetchDataFromSCGJWD
  *   v5.4.000 (2026-05-23):
  *     - [UPGRADE] Version bump to 5.4.000
  *   v5.2.012:
@@ -25,7 +28,7 @@
  *   CALLS (Invokes):
  *     - applyMasterCoordinatesToDailyJob() → 18_ServiceSCG.gs (self — calls Module 17)
  *     - runLookupEnrichment()              → 17_SearchService.gs
- *     - populateAliasFromSCGRawData_()     → 21_AliasService.gs
+ *     - populateAliasFromSCGRawData_()     → 21_AliasService.gs (manual/admin menu only)
  *   EXPORTS TO:
  *     - 00_App.gs             (fetchDataFromSCGJWD, applyMasterCoordinatesToDailyJob, clearAllSCGSheets_UI)
  *   SHEETS ACCESSED:
@@ -159,21 +162,21 @@ function fetchDataFromSCGJWD() {
 
     const shopAgg = {};  
     allFlatData.forEach(r => {  
-      const key = r[28];  
+      const key = r[DATA_IDX.SHOP_KEY];  
       if (!shopAgg[key]) shopAgg[key] = { qty: 0, weight: 0, invoices: new Set(), epod: 0 };  
-      shopAgg[key].qty += Number(r[14]) || 0;  
-      shopAgg[key].weight += Number(r[16]) || 0;  
-      shopAgg[key].invoices.add(r[2]);  
-      if (checkIsEPOD(r[9], r[2])) shopAgg[key].epod++;  
+      shopAgg[key].qty += Number(r[DATA_IDX.QTY]) || 0;  
+      shopAgg[key].weight += Number(r[DATA_IDX.WEIGHT]) || 0;  
+      shopAgg[key].invoices.add(r[DATA_IDX.INVOICE_NO]);  
+      if (checkIsEPOD(r[DATA_IDX.SOLD_TO_NAME], r[DATA_IDX.INVOICE_NO])) shopAgg[key].epod++;  
     });
 
     allFlatData.forEach(r => {  
-      const agg = shopAgg[r[28]];  
+      const agg = shopAgg[r[DATA_IDX.SHOP_KEY]];  
       const scanInv = agg.invoices.size - agg.epod;  
-      r[23] = agg.qty;  
-      r[24] = Number(agg.weight.toFixed(2));  
-      r[25] = scanInv;  
-      r[27] = `${r[9]} / รวม ${scanInv} บิล`;  
+      r[DATA_IDX.TOT_QTY] = agg.qty;  
+      r[DATA_IDX.TOT_WEIGHT] = Number(agg.weight.toFixed(2));  
+      r[DATA_IDX.SCAN_INV] = scanInv;  
+      r[DATA_IDX.OWNER_LABEL] = `${r[DATA_IDX.SOLD_TO_NAME]} / รวม ${scanInv} บิล`;  
     });
 
     const headers = [  
@@ -198,14 +201,9 @@ function fetchDataFromSCGJWD() {
 
     applyMasterCoordinatesToDailyJob();  
 
-    // [NEW v5.4.000] ดึงชื่อปลายทางจากข้อมูล SCG ใหม่ → M_ALIAS (เหมือน V4.0 NameMapping)
-    if (typeof populateAliasFromSCGRawData_ === 'function') {
-      try {
-        populateAliasFromSCGRawData_();
-      } catch (aliasErr) {
-        logWarn('ServiceSCG', 'populateAliasFromSCGRawData_ ล้มเหลว: ' + aliasErr.message);
-      }
-    }
+    // [FIX v5.4.002] ไม่เขียน M_ALIAS อัตโนมัติจาก Group 2 fetch
+    // เพื่อรักษา Single Writer Pattern ของ pipeline: autoEnrichAliasesFromFactBatch_() เท่านั้น
+    // หากต้อง migrate alias จาก SCG raw ให้ใช้เมนู admin: "📥 ดึงชื่อจาก SCG ดิบ → M_ALIAS"
 
     buildOwnerSummary();  
     buildShipmentSummary();

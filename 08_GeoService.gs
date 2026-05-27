@@ -302,9 +302,12 @@ function updateGeoStats(geoId) {
     const lastSeenCol   = GEO_IDX.LAST_SEEN   + 1;
     const usageCountCol = GEO_IDX.USAGE_COUNT  + 1;
 
-    sheet.getRange(targetRow, lastSeenCol).setValue(new Date());
-    const curr = Number(sheet.getRange(targetRow, usageCountCol).getValue()) || 0;
-    sheet.getRange(targetRow, usageCountCol).setValue(curr + 1);
+    const statsRange = sheet.getRange(targetRow, lastSeenCol, 1, usageCountCol - lastSeenCol + 1);
+    const statsRow = statsRange.getValues()[0];
+    const curr = Number(statsRow[usageCountCol - lastSeenCol] || 0) || 0;
+    statsRow[0] = new Date();
+    statsRow[usageCountCol - lastSeenCol] = curr + 1;
+    statsRange.setValues([statsRow]);
     invalidateGeoCache_();
 
   } catch (err) {

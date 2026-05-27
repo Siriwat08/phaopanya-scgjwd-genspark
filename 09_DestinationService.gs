@@ -146,7 +146,8 @@ function createDestination(personId, placeId, geoId, lat, lng, deliveryDate) {
     APP_CONST.STATUS_ACTIVE,
   ];
 
-  sheet.appendRow(newRow);
+  sheet.getRange(sheet.getLastRow() + 1, 1, 1, SCHEMA[SHEET.M_DESTINATION].length)
+       .setValues([newRow]);
   invalidateDestCache_();
   logDebug('DestinationService',
     `createDestination: ${newId} P:${personId} PL:${placeId} G:${geoId}`);
@@ -187,17 +188,21 @@ function updateDestinationStats(destId, deliveryDate) {
     const usageCountCol  = DEST_IDX.USAGE_COUNT    + 1;
     const delivDateCol   = DEST_IDX.DELIVERY_DATE  + 1;
 
-    sheet.getRange(targetRow, lastSeenCol).setValue(now);
-
-    const curr = Number(sheet.getRange(targetRow, usageCountCol).getValue()) || 0;
-    sheet.getRange(targetRow, usageCountCol).setValue(curr + 1);
+    const statsRange = sheet.getRange(targetRow, delivDateCol, 1, lastSeenCol - delivDateCol + 1);
+    const statsRow = statsRange.getValues()[0];
+    const usageOffset = usageCountCol - delivDateCol;
+    const lastSeenOffset = lastSeenCol - delivDateCol;
+    const curr = Number(statsRow[usageOffset] || 0) || 0;
 
     if (deliveryDate) {
       const safeDate = deliveryDate instanceof Date ? deliveryDate : new Date(deliveryDate);
       if (!isNaN(safeDate.getTime())) {
-        sheet.getRange(targetRow, delivDateCol).setValue(safeDate);
+        statsRow[0] = safeDate;
       }
     }
+    statsRow[usageOffset] = curr + 1;
+    statsRow[lastSeenOffset] = now;
+    statsRange.setValues([statsRow]);
 
     invalidateDestCache_();
 

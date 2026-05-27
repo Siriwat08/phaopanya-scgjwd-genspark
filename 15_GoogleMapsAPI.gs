@@ -21,11 +21,11 @@
  *     - [FIX] geocodeAddress: Normalize address ก่อน Hash + break ใน if(OK)
  *     - [FIX] reverseGeocode: เพิ่ม .setRegion('TH') + Cache รองรับ province/district
  *     - [FIX] getRouteDistanceKm: guard routes + legs ก่อนใช้
- *     - [FIX] Sheet Cache: ใช้ MC_* constants แทน hardcode + คืน province/district
+ *     - [FIX] Sheet Cache: ใช้ MAPS_CACHE_IDX constants จาก 01_Config.gs + คืน province/district
  * ===================================================
  * DEPENDENCIES:
  *   REQUIRES (Load Order):
- *     - 01_Config.gs          (SHEET.MAPS_CACHE, AI_CONFIG, APP_CONST)
+ *     - 01_Config.gs          (SHEET.MAPS_CACHE, AI_CONFIG, APP_CONST, MAPS_CACHE_IDX)
  *     - 02_Schema.gs          (SCHEMA[SHEET.MAPS_CACHE])
  *     - 14_Utils.gs           (generateMd5Hash, isValidLatLng, parseLatLng)
  *     - 03_SetupSheets.gs     (logError, logInfo)
@@ -55,20 +55,10 @@
  */
 
 // ============================================================
-// SECTION 1: SCHEMA Index สำหรับ MAPS_CACHE
+// SECTION 1: MAPS_CACHE indexes live in 01_Config.gs
 // ============================================================
 
-// MAPS_CACHE columns (ตาม 02_Schema.gs v003):
-// [0] cache_key, [1] address_input, [2] lat, [3] lng,
-// [4] resolved_address, [5] source, [6] created_at,
-// [7] hit_count, [8] province, [9] district
-const MC_KEY  = 0;
-const MC_LAT  = 2;
-const MC_LNG  = 3;
-const MC_ADDR = 4;
-const MC_HIT  = 7;
-const MC_PROV = 8;
-const MC_DIST = 9;
+// ใช้ MAPS_CACHE_IDX จาก 01_Config.gs เพื่อให้ index ทุกชีตอยู่ที่เดียวกันตาม LMDS Rule 3
 
 // ============================================================
 // SECTION 2: geocodeAddress — Address → LatLng
@@ -267,7 +257,7 @@ function getRouteDistanceKm(originAddr, destAddr) {
 
 /**
  * getFromSheetCache_ — ดึงข้อมูลจาก MAPS_CACHE Sheet
- * [FIX v003] ใช้ MC_* constants (จาก SCHEMA) แทน hardcode index
+ * [FIX v5.4.002] ใช้ MAPS_CACHE_IDX constants จาก 01_Config.gs แทน module-level MC_* constants
  * [FIX v003] คืน province + district ด้วย
  */
 function getFromSheetCache_(cacheKey) {
@@ -280,19 +270,19 @@ function getFromSheetCache_(cacheKey) {
                          .getValues();
 
   for (let i = 0; i < data.length; i++) {
-    if (String(data[i][MC_KEY]).trim() !== cacheKey) continue;
+    if (String(data[i][MAPS_CACHE_IDX.CACHE_KEY]).trim() !== cacheKey) continue;
 
-    // อัปเดต hit_count
-    sheet.getRange(i + 2, MC_HIT + 1)
-         .setValue(Number(data[i][MC_HIT] || 0) + 1);
+    const nextHitCount = Number(data[i][MAPS_CACHE_IDX.HIT_COUNT] || 0) + 1;
+    sheet.getRange(i + 2, MAPS_CACHE_IDX.HIT_COUNT + 1, 1, 1)
+         .setValues([[nextHitCount]]);
 
     // [FIX v003] คืน province + district ด้วย
     return {
-      lat:          Number(data[i][MC_LAT])  || 0,
-      lng:          Number(data[i][MC_LNG])  || 0,
-      resolvedAddr: String(data[i][MC_ADDR]) || '',
-      province:     String(data[i][MC_PROV]) || '',
-      district:     String(data[i][MC_DIST]) || '',
+      lat:          Number(data[i][MAPS_CACHE_IDX.LAT])              || 0,
+      lng:          Number(data[i][MAPS_CACHE_IDX.LNG])              || 0,
+      resolvedAddr: String(data[i][MAPS_CACHE_IDX.RESOLVED_ADDRESS]) || '',
+      province:     String(data[i][MAPS_CACHE_IDX.PROVINCE])         || '',
+      district:     String(data[i][MAPS_CACHE_IDX.DISTRICT])         || '',
     };
   }
   return null;
@@ -308,18 +298,20 @@ function saveToSheetCache_(cacheKey, inputAddr, result) {
     const sheet = ss.getSheetByName(SHEET.MAPS_CACHE);
     if (!sheet) return;
 
-    sheet.appendRow([
-      cacheKey,
-      inputAddr,
-      result.lat          || 0,
-      result.lng          || 0,
-      result.resolvedAddr || '',
-      'maps_api',
-      new Date(),
-      1,
-      result.province     || '',  // [FIX v003] col [8]
-      result.district     || '',  // [FIX v003] col [9]
-    ]);
+    const row = [];
+    row[MAPS_CACHE_IDX.CACHE_KEY]        = cacheKey;
+    row[MAPS_CACHE_IDX.ADDRESS_INPUT]    = inputAddr;
+    row[MAPS_CACHE_IDX.LAT]              = result.lat          || 0;
+    row[MAPS_CACHE_IDX.LNG]              = result.lng          || 0;
+    row[MAPS_CACHE_IDX.RESOLVED_ADDRESS] = result.resolvedAddr || '';
+    row[MAPS_CACHE_IDX.SOURCE]           = 'maps_api';
+    row[MAPS_CACHE_IDX.CREATED_AT]       = new Date();
+    row[MAPS_CACHE_IDX.HIT_COUNT]        = 1;
+    row[MAPS_CACHE_IDX.PROVINCE]         = result.province     || '';
+    row[MAPS_CACHE_IDX.DISTRICT]         = result.district     || '';
+
+    sheet.getRange(sheet.getLastRow() + 1, 1, 1, SCHEMA[SHEET.MAPS_CACHE].length)
+         .setValues([row]);
   } catch (err) {
     logError('MapsAPI', `saveToSheetCache_ ล้มเหลว: ${err.message}`);
   }

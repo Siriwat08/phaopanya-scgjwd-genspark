@@ -195,6 +195,23 @@ function onEdit(e) {
  * สาเหตุ: Simple Trigger (onSelectionChange) ไม่มีสิทธิ์เรียก getUi().alert() ทำให้ล้มเหลวเงียบๆ
  * Installable Trigger มีสิทธิ์เต็มรูปแบบ รวมถึง UI dialog
  */
+function autoInstallSmartNav_() {
+  try {
+    const triggers = ScriptApp.getProjectTriggers();
+    const exists = triggers.some(t => t.getHandlerFunction() === 'handleSelectionChange_');
+    if (exists) return;
+
+    ScriptApp.newTrigger('handleSelectionChange_')
+      .forSpreadsheet(SpreadsheetApp.getActive())
+      .onSelectionChange()
+      .create();
+
+    logInfo('App', 'autoInstallSmartNav_: ติดตั้ง Smart Navigation trigger อัตโนมัติแล้ว');
+  } catch (err) {
+    logWarn('App', 'autoInstallSmartNav_: ข้ามการติดตั้งอัตโนมัติ — ' + err.message);
+  }
+}
+
 function installSmartNavTrigger() {
   // ลบ Smart Nav trigger เก่าก่อน (ถ้ามี)
   const triggers = ScriptApp.getProjectTriggers();
@@ -573,7 +590,7 @@ function showVersionInfo() {
     `🚚 ${APP_NAME}\n` +
     `Version: ${APP_VERSION}\n` +
     `Schema: v${SCHEMA_VERSION}\n\n` +
-    `📦 Modules (21 files):\n` +
+    `📦 Modules (22 files):\n` +
     `  00_App.gs                v5.4.001\n` +
     `  01_Config.gs             v5.4.001\n` +
     `  02_Schema.gs             v5.4.001\n` +

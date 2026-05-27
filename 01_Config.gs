@@ -23,7 +23,7 @@
  *   DEFINES:
  *     - APP_VERSION, SCHEMA_VERSION, APP_NAME (Metadata)
  *     - SHEET{} (7 core sheets + 10 operation sheets + M_ALIAS)
- *     - *_IDX{} (Person, PersonAlias, Place, PlaceAlias, Alias, Geo, Dest, Fact, Review, ThGeo, Employee, Src, Data)
+ *     - *_IDX{} (Person, PersonAlias, Place, PlaceAlias, Alias, Geo, Dest, Fact, Review, ThGeo, MapsCache, SysLog, Employee, Src, Data)
  *     - AI_CONFIG, SCG_CONFIG, APP_CONST (System configs)
  *     - _GLOBAL_* CACHE variables (RAM cache layer)
  *   CALLED BY (All Modules):
@@ -292,6 +292,32 @@ const TH_GEO_IDX = Object.freeze({
 });
 
 // ============================================================
+// SECTION 3.1: System / Cache Indexes
+// ============================================================
+
+const SYS_LOG_IDX = Object.freeze({
+  LOG_ID:    0,
+  TIMESTAMP: 1,
+  MODULE:    2,
+  LEVEL:     3,
+  MESSAGE:   4,
+  DETAILS:   5,
+});
+
+const MAPS_CACHE_IDX = Object.freeze({
+  CACHE_KEY:        0,
+  ADDRESS_INPUT:    1,
+  LAT:              2,
+  LNG:              3,
+  RESOLVED_ADDRESS: 4,
+  SOURCE:           5,
+  CREATED_AT:       6,
+  HIT_COUNT:        7,
+  PROVINCE:         8,
+  DISTRICT:         9,
+});
+
+// ============================================================
 // SECTION 4: ข้อมูลพนักงาน Index
 // [FIX v003] เพิ่มเป็น 8 คอลัมน์ตามชีตจริง (เดิม 5 คอลัมน์ผิด)
 // ============================================================
@@ -487,8 +513,10 @@ function validateConfig() {
       { name: SHEET.M_GEO_POINT,   idx: GEO_IDX,     label: 'M_GEO_POINT'   },
       { name: SHEET.M_DESTINATION, idx: DEST_IDX,    label: 'M_DESTINATION' },
       { name: SHEET.FACT_DELIVERY, idx: FACT_IDX,    label: 'FACT_DELIVERY' },
-      { name: SHEET.Q_REVIEW,      idx: REVIEW_IDX,  label: 'Q_REVIEW'      },
-      { name: SHEET.M_ALIAS,       idx: ALIAS_IDX,   label: 'M_ALIAS'       },
+      { name: SHEET.Q_REVIEW,      idx: REVIEW_IDX,      label: 'Q_REVIEW'      },
+      { name: SHEET.M_ALIAS,       idx: ALIAS_IDX,       label: 'M_ALIAS'       },
+      { name: SHEET.SYS_LOG,       idx: SYS_LOG_IDX,     label: 'SYS_LOG'       },
+      { name: SHEET.MAPS_CACHE,    idx: MAPS_CACHE_IDX,  label: 'MAPS_CACHE'    },
     ];
     checks.forEach(item => {
       const schemaArr = SCHEMA[item.name];

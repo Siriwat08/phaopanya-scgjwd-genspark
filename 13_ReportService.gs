@@ -160,8 +160,8 @@ function buildFullQualityReport() {
     `Unclassified:${unclassifiedCount}`,
   ].join(' | ');
 
-  // เขียนรายงาน
-  rptSheet.appendRow([
+  // เขียนรายงานแบบ batch write เดียว
+  const reportRow = [
     new Date(),       // report_date
     totalFact,        // total_records
     autoCount,        // auto_matched
@@ -170,7 +170,9 @@ function buildFullQualityReport() {
     errorCount,       // failed
     `Auto:${autoMatchRate}% / Processed:${processedRate}%`, // match_rate
     note,             // notes
-  ]);
+  ];
+  rptSheet.getRange(rptSheet.getLastRow() + 1, 1, 1, SCHEMA[SHEET.RPT_QUALITY].length)
+          .setValues([reportRow]);
 
   logInfo('ReportService',
     `Report เสร็จ — Total:${totalFact} Auto:${autoMatchRate}% ` +

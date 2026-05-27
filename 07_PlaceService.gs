@@ -491,7 +491,7 @@ function extractTextPriority_(rawAddress, rawPlaceName) {
 function fuzzyMatchAddress(rawAddr, threshold = 0.7) {
   if (!rawAddr) return '';
   
-  const allRows = typeof loadCachedGeoRows_ === 'function' ? loadCachedGeoRows_() : [];
+  const allRows = loadPlaceGeoRows_();
   if (allRows.length === 0) return '';
 
   let bestMatch = null;
@@ -565,7 +565,8 @@ function createPlace(normResult, province, district, subDistrict, postcode) {
     universalMasterId,
   ];
 
-  sheet.appendRow(newRow);
+  sheet.getRange(sheet.getLastRow() + 1, 1, 1, SCHEMA[SHEET.M_PLACE].length)
+       .setValues([newRow]);
   invalidatePlaceCache_();
 
   // [REMOVED v5.4.001] ไม่เรียก createGlobalAlias() — M_ALIAS เขียนที่ autoEnrich เท่านั้น (Single Writer)
@@ -580,7 +581,16 @@ function createPlaceAlias(placeId, aliasName, matchScore) {
   const sheet = ss.getSheetByName(SHEET.M_PLACE_ALIAS);
   const newId = generateShortId('PLA');
 
-  sheet.appendRow([newId, placeId, aliasName, matchScore || 0, new Date(), true]);
+  const row = [];
+  row[PLACE_ALIAS_IDX.ALIAS_ID]    = newId;
+  row[PLACE_ALIAS_IDX.PLACE_ID]    = placeId;
+  row[PLACE_ALIAS_IDX.ALIAS_NAME]  = aliasName;
+  row[PLACE_ALIAS_IDX.MATCH_SCORE] = matchScore || 0;
+  row[PLACE_ALIAS_IDX.CREATED_AT]  = new Date();
+  row[PLACE_ALIAS_IDX.ACTIVE_FLAG] = true;
+
+  sheet.getRange(sheet.getLastRow() + 1, 1, 1, SCHEMA[SHEET.M_PLACE_ALIAS].length)
+       .setValues([row]);
   invalidatePlaceAliasCache_();
 
   // [REMOVED v5.4.001] ไม่เรียก createGlobalAlias() — M_ALIAS เขียนที่ autoEnrich เท่านั้น (Single Writer)
@@ -618,9 +628,12 @@ function updatePlaceStats(placeId) {
     const lastSeenCol   = PLACE_IDX.LAST_SEEN   + 1;
     const usageCountCol = PLACE_IDX.USAGE_COUNT  + 1;
 
-    sheet.getRange(targetRow, lastSeenCol).setValue(new Date());
-    const curr = Number(sheet.getRange(targetRow, usageCountCol).getValue()) || 0;
-    sheet.getRange(targetRow, usageCountCol).setValue(curr + 1);
+    const statsRange = sheet.getRange(targetRow, lastSeenCol, 1, usageCountCol - lastSeenCol + 1);
+    const statsRow = statsRange.getValues()[0];
+    const curr = Number(statsRow[usageCountCol - lastSeenCol] || 0) || 0;
+    statsRow[0] = new Date();
+    statsRow[usageCountCol - lastSeenCol] = curr + 1;
+    statsRange.setValues([statsRow]);
     invalidatePlaceCache_();
 
   } catch (err) {
@@ -633,21 +646,27 @@ function updatePlaceStats(placeId) {
 // ============================================================
 
 /**
- * [NEW v5.2.001] loadCachedGeoRows_ — Memoization loader
+ * loadPlaceGeoRows_ — wrapper สำหรับอ่าน SYS_TH_GEO โดยไม่ชนชื่อ global ของ 16_GeoDictionaryBuilder.gs
+ * ใช้ loadCachedGeoRows_ จาก Module 16 เป็น canonical loader เพื่อให้ได้ข้อมูลครบ 16 คอลัมน์
  */
-function loadCachedGeoRows_() {
+function loadPlaceGeoRows_() {
+  if (typeof loadCachedGeoRows_ === 'function') return loadCachedGeoRows_();
   if (_GLOBAL_GEO_DICT_CACHE) return _GLOBAL_GEO_DICT_CACHE;
 
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const sheet = ss.getSheetByName(SHEET.SYS_TH_GEO);
   if (!sheet || sheet.getLastRow() < 2) return [];
 
-  const data = sheet.getRange(2, 1, sheet.getLastRow() - 1, 4).getValues();
+  const data = sheet.getRange(2, 1, sheet.getLastRow() - 1, SCHEMA[SHEET.SYS_TH_GEO].length).getValues();
   _GLOBAL_GEO_DICT_CACHE = data.map(row => ({
     postcode:    String(row[TH_GEO_IDX.POSTCODE]     || '').trim(),
     subDistrict: String(row[TH_GEO_IDX.SUB_DISTRICT] || '').trim(),
     district:    String(row[TH_GEO_IDX.DISTRICT]     || '').trim(),
     province:    String(row[TH_GEO_IDX.PROVINCE]     || '').trim(),
+    searchKey:   String(row[TH_GEO_IDX.SEARCH_KEY]   || '').trim(),
+    postalKey:   String(row[TH_GEO_IDX.POSTAL_KEY]   || '').trim(),
+    noteType:    String(row[TH_GEO_IDX.NOTE_TYPE]    || 'FULL_AREA'),
+    noteScope:   String(row[TH_GEO_IDX.NOTE_SCOPE]   || 'FULL')
   }));
 
   return _GLOBAL_GEO_DICT_CACHE;
