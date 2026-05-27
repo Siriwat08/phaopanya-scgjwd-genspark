@@ -185,6 +185,18 @@ function applyAllPendingDecisions() {
 // SECTION 3: applyReviewDecision
 // ============================================================
 
+function writeReviewDecisionStatus_(sheet, targetRow, status, reviewer, reviewedAt, decision, note) {
+  const values = [status, reviewer, reviewedAt, decision];
+  let width = REVIEW_IDX.DECISION - REVIEW_IDX.STATUS + 1;
+  if (note !== undefined) {
+    values.push(note);
+    width = REVIEW_IDX.NOTE - REVIEW_IDX.STATUS + 1;
+  }
+
+  sheet.getRange(targetRow, REVIEW_IDX.STATUS + 1, 1, width)
+       .setValues([values]);
+}
+
 /**
  * applyReviewDecision — ประมวลผล Decision จาก Admin
  * [FIX v003] ใช้ REVIEW_IDX.xxx + 1 แทน headers.indexOf (case-sensitive)
@@ -339,12 +351,8 @@ function applyReviewDecision(reviewId, decisionVal, rowData) {
       upsertFactDelivery(srcObj, personId, placeId, geoId, destId,
         { action: 'CREATE_NEW', reason: 'REVIEW_APPROVED', confidence: 95, priority: 0 });
 
-      // อัปเดต Q_REVIEW status
-      sheet.getRange(targetRow, REVIEW_IDX.STATUS      + 1).setValue('Done');
-      sheet.getRange(targetRow, REVIEW_IDX.REVIEWER    + 1).setValue(reviewer);
-      sheet.getRange(targetRow, REVIEW_IDX.REVIEWED_AT + 1).setValue(now);
-      sheet.getRange(targetRow, REVIEW_IDX.DECISION    + 1).setValue(decisionVal);
-      sheet.getRange(targetRow, REVIEW_IDX.NOTE        + 1).setValue('Resolved (Created New)');
+      // อัปเดต Q_REVIEW status แบบ batch write เดียว
+      writeReviewDecisionStatus_(sheet, targetRow, 'Done', reviewer, now, decisionVal, 'Resolved (Created New)');
       break;
     }
 
@@ -362,28 +370,19 @@ function applyReviewDecision(reviewId, decisionVal, rowData) {
         }
       }
 
-      sheet.getRange(targetRow, REVIEW_IDX.STATUS      + 1).setValue('Done');
-      sheet.getRange(targetRow, REVIEW_IDX.REVIEWER    + 1).setValue(reviewer);
-      sheet.getRange(targetRow, REVIEW_IDX.REVIEWED_AT + 1).setValue(now);
-      sheet.getRange(targetRow, REVIEW_IDX.DECISION    + 1).setValue(decisionVal);
+      writeReviewDecisionStatus_(sheet, targetRow, 'Done', reviewer, now, decisionVal);
       break;
     }
 
     case 'ESCALATE': {
-      // [FIX v003] setValue('Escalated') แล้ว return ทันที
-      sheet.getRange(targetRow, REVIEW_IDX.STATUS      + 1).setValue('Escalated');
-      sheet.getRange(targetRow, REVIEW_IDX.REVIEWER    + 1).setValue(reviewer);
-      sheet.getRange(targetRow, REVIEW_IDX.REVIEWED_AT + 1).setValue(now);
-      sheet.getRange(targetRow, REVIEW_IDX.DECISION    + 1).setValue(decisionVal);
+      // [FIX v5.4.002] เขียน status/reviewer/reviewed_at/decision ด้วย batch write เดียว
+      writeReviewDecisionStatus_(sheet, targetRow, 'Escalated', reviewer, now, decisionVal);
       logInfo('ReviewService', `reviewId ${reviewId} → Escalated`);
       return; 
     }
 
     case 'IGNORE': {
-      sheet.getRange(targetRow, REVIEW_IDX.STATUS      + 1).setValue('Done');
-      sheet.getRange(targetRow, REVIEW_IDX.REVIEWER    + 1).setValue(reviewer);
-      sheet.getRange(targetRow, REVIEW_IDX.REVIEWED_AT + 1).setValue(now);
-      sheet.getRange(targetRow, REVIEW_IDX.DECISION    + 1).setValue(decisionVal);
+      writeReviewDecisionStatus_(sheet, targetRow, 'Done', reviewer, now, decisionVal);
       break;
     }
 

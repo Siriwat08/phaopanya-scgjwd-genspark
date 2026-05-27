@@ -281,7 +281,8 @@ function createPerson(normResult) {
     universalMasterId,
   ];
 
-  sheet.appendRow(newRow);
+  sheet.getRange(sheet.getLastRow() + 1, 1, 1, SCHEMA[SHEET.M_PERSON].length)
+       .setValues([newRow]);
   invalidatePersonCache_();
   logDebug('PersonService', `createPerson: ${newId} — ${normResult.cleanName}`);
 
@@ -299,7 +300,16 @@ function createPersonAlias(personId, aliasName, matchScore) {
   const sheet = ss.getSheetByName(SHEET.M_PERSON_ALIAS);
   const newId = generateShortId('PA');
 
-  sheet.appendRow([newId, personId, aliasName, matchScore || 0, new Date(), true]);
+  const row = [];
+  row[PERSON_ALIAS_IDX.ALIAS_ID]    = newId;
+  row[PERSON_ALIAS_IDX.PERSON_ID]   = personId;
+  row[PERSON_ALIAS_IDX.ALIAS_NAME]  = aliasName;
+  row[PERSON_ALIAS_IDX.MATCH_SCORE] = matchScore || 0;
+  row[PERSON_ALIAS_IDX.CREATED_AT]  = new Date();
+  row[PERSON_ALIAS_IDX.ACTIVE_FLAG] = true;
+
+  sheet.getRange(sheet.getLastRow() + 1, 1, 1, SCHEMA[SHEET.M_PERSON_ALIAS].length)
+       .setValues([row]);
   invalidateAliasCache_();
   logDebug('PersonService', `createPersonAlias: ${aliasName} → ${personId}`);
 
@@ -338,11 +348,12 @@ function updatePersonStats(personId) {
     const lastSeenCol   = PERSON_IDX.LAST_SEEN   + 1;
     const usageCountCol = PERSON_IDX.USAGE_COUNT  + 1;
 
-    sheet.getRange(targetRow, lastSeenCol).setValue(new Date());
-    const currCount = Number(
-      sheet.getRange(targetRow, usageCountCol).getValue()
-    ) || 0;
-    sheet.getRange(targetRow, usageCountCol).setValue(currCount + 1);
+    const statsRange = sheet.getRange(targetRow, lastSeenCol, 1, usageCountCol - lastSeenCol + 1);
+    const statsRow = statsRange.getValues()[0];
+    const currCount = Number(statsRow[usageCountCol - lastSeenCol] || 0) || 0;
+    statsRow[0] = new Date();
+    statsRow[usageCountCol - lastSeenCol] = currCount + 1;
+    statsRange.setValues([statsRow]);
     invalidatePersonCache_();
 
   } catch (err) {
@@ -392,11 +403,17 @@ function mergePersonRecords(sourceId, targetId) {
       }
 
       // [FIX v003] ห้ามลบ — เปลี่ยน Status เป็น Merged แทน
-      sheet.getRange(targetRow, statCol + 1).setValue(APP_CONST.STATUS_MERGED);
-      if (noteCol !== -1) {
-        sheet.getRange(targetRow, noteCol + 1).setValue(
-          `Merged → ${targetId} on ${toThaiDateStr(new Date())}`
-        );
+      const mergeNote = `Merged → ${targetId} on ${toThaiDateStr(new Date())}`;
+      if (noteCol === statCol + 1) {
+        sheet.getRange(targetRow, statCol + 1, 1, 2)
+             .setValues([[APP_CONST.STATUS_MERGED, mergeNote]]);
+      } else {
+        sheet.getRange(targetRow, statCol + 1, 1, 1)
+             .setValues([[APP_CONST.STATUS_MERGED]]);
+        if (noteCol !== -1) {
+          sheet.getRange(targetRow, noteCol + 1, 1, 1)
+               .setValues([[mergeNote]]);
+        }
       }
       break;
     }

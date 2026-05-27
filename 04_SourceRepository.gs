@@ -78,24 +78,28 @@ const SRC_READ_COLS = 37;
  * เรียกจาก runFullPipeline() หรือ Menu
  */
 function runLoadSource() {
-  const ss       = SpreadsheetApp.getActiveSpreadsheet();
-  const srcSheet = ss.getSheetByName(SHEET.SOURCE);
+  try {
+    const ss       = SpreadsheetApp.getActiveSpreadsheet();
+    const srcSheet = ss.getSheetByName(SHEET.SOURCE);
 
-  if (!srcSheet) {
-    logError('SourceRepo', `ไม่พบชีต: ${SHEET.SOURCE}`);
-    throw new Error(`ไม่พบชีต "${SHEET.SOURCE}" กรุณาตรวจสอบชื่อชีต`);
-  }
+    if (!srcSheet) {
+      throw new Error(`ไม่พบชีต "${SHEET.SOURCE}" กรุณาตรวจสอบชื่อชีต`);
+    }
 
-  logInfo('SourceRepo', 'เริ่มโหลด Source (Refreshing Cache)');
-  invalidateSourceCache();
+    logInfo('SourceRepo', 'เริ่มโหลด Source (Refreshing Cache)');
+    invalidateSourceCache();
 
-  const pending = getUnprocessedRows();
-  logInfo('SourceRepo', `ตรวจพบแถวที่ต้องประมวลผล: ${pending.length} แถว`);
-  
-  if (pending.length > 0) {
-    SpreadsheetApp.getActiveSpreadsheet().toast(`🚀 โหลดข้อมูลสำเร็จ: ${pending.length} แถว พร้อมประมวลผล`, APP_NAME);
-  } else {
-    SpreadsheetApp.getActiveSpreadsheet().toast(`✅ ข้อมูลเป็นปัจจุบันอยู่แล้ว`, APP_NAME);
+    const pending = getUnprocessedRows();
+    logInfo('SourceRepo', `ตรวจพบแถวที่ต้องประมวลผล: ${pending.length} แถว`);
+    
+    if (pending.length > 0) {
+      ss.toast(`🚀 โหลดข้อมูลสำเร็จ: ${pending.length} แถว พร้อมประมวลผล`, APP_NAME);
+    } else {
+      ss.toast(`✅ ข้อมูลเป็นปัจจุบันอยู่แล้ว`, APP_NAME);
+    }
+  } catch (err) {
+    logError('SourceRepo', `runLoadSource ล้มเหลว: ${err.message}`, err);
+    throw err;
   }
 }
 

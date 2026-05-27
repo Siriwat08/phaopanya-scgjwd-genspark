@@ -150,9 +150,14 @@ const REF_NO_PATTERN  = /#[0-9]+|No\.?\s*[0-9]+/gi;
  * ไม่ใช่ Batch แยก — ฟังก์ชันนี้เป็น Placeholder สำหรับขยายอนาคต
  */
 function runNormalize() {
-  // Normalize เกิดใน processOneRow() ของ 10_MatchEngine.gs ต่อทุก row
-  // ไม่ต้องทำ Batch แยก เพราะ Source Repository ส่ง srcObj เข้า Engine แล้ว
-  logInfo('NormalizeService', 'Normalize ทำงานใน processOneRow() ของ MatchEngine');
+  try {
+    // Normalize เกิดใน processOneRow() ของ 10_MatchEngine.gs ต่อทุก row
+    // ไม่ต้องทำ Batch แยก เพราะ Source Repository ส่ง srcObj เข้า Engine แล้ว
+    logInfo('NormalizeService', 'Normalize ทำงานใน processOneRow() ของ MatchEngine');
+  } catch (err) {
+    logError('NormalizeService', `runNormalize ล้มเหลว: ${err.message}`, err);
+    throw err;
+  }
 }
 
 /**
