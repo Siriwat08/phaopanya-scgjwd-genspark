@@ -3,7 +3,7 @@
  * FILE: 18_ServiceSCG.gs
  * LMDS V5.4 — SCG API Service (Group 2 Commander)
  * ===================================================
- * PURPOSE:
+ * PURPOSE :
  *   ดึงข้อมูลการจัดส่งจาก SCG API → เขียนลงตารางงานประจำวัน
  *   แล้วเรียก Module 17 จับคู่พิกัด พร้อมสร้างสรุปเจ้าของสินค้า/Shipment
  *   เป็น Commander ของ Group 2 (Daily Ops)
