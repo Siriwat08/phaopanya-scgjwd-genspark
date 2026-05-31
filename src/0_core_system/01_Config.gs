@@ -73,15 +73,26 @@ let _GLOBAL_GEO_POINTS_CACHE = null;
  * @summary ใช้สำหรับเคลียร์ความจำของสคริปต์เพื่อให้โหลดข้อมูลใหม่จากชีต 100%
  */
 function invalidateAllGlobalCaches() {
-  _GLOBAL_GEO_DICT_CACHE = null;
-  _GLOBAL_GEO_POINTS_CACHE = null;
+  try {
+      _GLOBAL_GEO_DICT_CACHE = null;
+      _GLOBAL_GEO_POINTS_CACHE = null;
 
-  // เรียกฟังก์ชันล้าง Cache ในโมดูลอื่นๆ (ถ้ามี)
-  if (typeof invalidatePersonCache_ === 'function') invalidatePersonCache_();
-  if (typeof invalidatePlaceCache_  === 'function') invalidatePlaceCache_();
-  if (typeof invalidateGeoCache_    === 'function') invalidateGeoCache_();
+      // เรียกฟังก์ชันล้าง Cache ในโมดูลอื่นๆ (ถ้ามี)
+      if (typeof invalidatePersonCache_ === 'function') invalidatePersonCache_();
+      if (typeof invalidatePlaceCache_  === 'function') invalidatePlaceCache_();
+      if (typeof invalidateGeoCache_    === 'function') invalidateGeoCache_();
 
-  logInfo('System', 'ล้างข้อมูลในความจำ (Cache) ทั้งหมดเรียบร้อยแล้ว');
+      logInfo('System', 'ล้างข้อมูลในความจำ (Cache) ทั้งหมดเรียบร้อยแล้ว');
+
+  } catch (err) {
+    logError('System', 'invalidateAllGlobalCaches ล้มเหลว: ' + err.message, err);
+    try {
+      SpreadsheetApp.getUi().alert('❌ ล้าง Cache ล้มเหลว: ' + err.message);
+    } catch (uiErr) {
+      logWarn('System', 'ไม่สามารถแสดง UI error ได้: ' + uiErr.message);
+    }
+    throw err;
+  }
 }
 
 // ============================================================

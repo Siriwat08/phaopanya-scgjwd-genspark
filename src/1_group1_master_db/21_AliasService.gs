@@ -446,48 +446,59 @@ function convertPlaceIdToUuid(placeId) {
  * ควรรันหลังจาก setup sheets หรือก่อน migration
  */
 function assignMasterUuidIfMissing() {
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
-  var fixedTotal = 0;
+  try {
+      var ss = SpreadsheetApp.getActiveSpreadsheet();
+      var fixedTotal = 0;
 
-  [SHEET.M_PERSON, SHEET.M_PLACE].forEach(function(sheetName) {
-    var sheet = ss.getSheetByName(sheetName);
-    if (!sheet) return;
+      [SHEET.M_PERSON, SHEET.M_PLACE].forEach(function(sheetName) {
+        var sheet = ss.getSheetByName(sheetName);
+        if (!sheet) return;
 
-    // หาตำแหน่งคอลัมน์ master_uuid จาก header
-    var headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
-    var mUuidColIdx = headers.indexOf('master_uuid');
-    if (mUuidColIdx === -1) {
-      logWarn('AliasService', sheetName + ': ไม่พบคอลัมน์ master_uuid ใน header — ข้าม');
-      return;
-    }
+        // หาตำแหน่งคอลัมน์ master_uuid จาก header
+        var headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+        var mUuidColIdx = headers.indexOf('master_uuid');
+        if (mUuidColIdx === -1) {
+          logWarn('AliasService', sheetName + ': ไม่พบคอลัมน์ master_uuid ใน header — ข้าม');
+          return;
+        }
 
-    var lr = sheet.getLastRow();
-    if (lr < 2) return;
+        var lr = sheet.getLastRow();
+        if (lr < 2) return;
 
-    var uuidColRange = sheet.getRange(2, mUuidColIdx + 1, lr - 1, 1);
-    var uidData = uuidColRange.getValues();
-    var fixedCount = 0;
+        var uuidColRange = sheet.getRange(2, mUuidColIdx + 1, lr - 1, 1);
+        var uidData = uuidColRange.getValues();
+        var fixedCount = 0;
 
-    for (var i = 0; i < uidData.length; i++) {
-      if (!uidData[i][0]) {
-        uidData[i][0] = Utilities.getUuid();
-        fixedCount++;
+        for (var i = 0; i < uidData.length; i++) {
+          if (!uidData[i][0]) {
+            uidData[i][0] = Utilities.getUuid();
+            fixedCount++;
+          }
+        }
+
+        if (fixedCount > 0) {
+          uuidColRange.setValues(uidData);
+          logInfo('AliasService', sheetName + ': มอบ master_uuid ให้ ' + fixedCount + ' แถวที่ยังไม่มี');
+        }
+        fixedTotal += fixedCount;
+      });
+
+      // ล้าง Cache เพื่อให้ loader เห็นข้อมูลใหม่
+      if (fixedTotal > 0) {
+        invalidateAllGlobalCaches();
       }
-    }
 
-    if (fixedCount > 0) {
-      uuidColRange.setValues(uidData);
-      logInfo('AliasService', sheetName + ': มอบ master_uuid ให้ ' + fixedCount + ' แถวที่ยังไม่มี');
-    }
-    fixedTotal += fixedCount;
-  });
+      return fixedTotal;
 
-  // ล้าง Cache เพื่อให้ loader เห็นข้อมูลใหม่
-  if (fixedTotal > 0) {
-    invalidateAllGlobalCaches();
+  } catch (err) {
+    logError('AliasService', 'assignMasterUuidIfMissing ล้มเหลว: ' + err.message, err);
+    try {
+      SpreadsheetApp.getUi().alert('❌ ตรวจสอบ Master UUID ล้มเหลว: ' + err.message);
+    } catch (uiErr) {
+      logWarn('AliasService', 'ไม่สามารถแสดง UI error ได้: ' + uiErr.message);
+    }
+    throw err;
   }
-
-  return fixedTotal;
 }
 
 // ============================================================
@@ -627,96 +638,107 @@ function MIGRATION_HybridAliasSystem() {
  * @return {number} จำนวน alias ที่สร้างใหม่
  */
 function populateAliasFromSCGRawData_() {
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
-  var sourceSheet = ss.getSheetByName(SHEET.SOURCE);
-  var startTime = new Date();
-  if (!sourceSheet || sourceSheet.getLastRow() < 2) {
-    logWarn('AliasService', 'ชีต SCG ดิบ ว่างอยู่ — ข้ามการดึงข้อมูล');
-    return 0;
-  }
-
-  var schemaLen = SCHEMA[SHEET.SOURCE] ? SCHEMA[SHEET.SOURCE].length : 37;
-  var data = sourceSheet.getRange(2, 1, sourceSheet.getLastRow() - 1, schemaLen).getValues();
-
-  var nameCount = {};  // { normalizeName: { rawName, count } }
-  data.forEach(function(r, idx) {
-    if (idx % 500 === 0) ensureAliasMigrationTime_(startTime, 'SCG raw scan row ' + (idx + 1));
-    var rawPersonName = String(r[SRC_IDX.RAW_PERSON_NAME] || '').trim();
-    if (!rawPersonName || rawPersonName.length < 2) return;
-
-    var normKey = normalizeForCompare(rawPersonName);
-    if (!normKey || normKey.length < 2) return;
-
-    if (!nameCount[normKey]) {
-      nameCount[normKey] = { rawName: rawPersonName, count: 0 };
-    }
-    nameCount[normKey].count++;
-  });
-
-  var allPersons = loadAllPersons_();
-  var personNormMap = {};
-  allPersons.forEach(function(p) {
-    if (p.normalized && p.masterUuid) {
-      personNormMap[p.normalized] = p.masterUuid;
-    }
-  });
-
-  var allPlaces = loadAllPlaces_();
-  var placeNormMap = {};
-  allPlaces.forEach(function(p) {
-    if (p.normalized && p.masterUuid) {
-      placeNormMap[p.normalized] = p.masterUuid;
-    }
-  });
-
-  var aliasRequests = [];
-  var keys = Object.keys(nameCount);
-  for (var k = 0; k < keys.length; k++) {
-    if (k % 100 === 0) ensureAliasMigrationTime_(startTime, 'SCG alias match ' + (k + 1));
-    var normKey = keys[k];
-    var info = nameCount[normKey];
-    var rawName = info.rawName;
-    var matchedUuid = personNormMap[normKey];
-    var matchedType = 'PERSON';
-
-    if (!matchedUuid) {
-      matchedUuid = placeNormMap[normKey];
-      matchedType = 'PLACE';
-    }
-
-    if (!matchedUuid) {
-      for (var pNorm in personNormMap) {
-        if (pNorm.length >= 4 && (normKey.includes(pNorm) || pNorm.includes(normKey))) {
-          matchedUuid = personNormMap[pNorm];
-          matchedType = 'PERSON';
-          break;
-        }
+  try {
+      var ss = SpreadsheetApp.getActiveSpreadsheet();
+      var sourceSheet = ss.getSheetByName(SHEET.SOURCE);
+      var startTime = new Date();
+      if (!sourceSheet || sourceSheet.getLastRow() < 2) {
+        logWarn('AliasService', 'ชีต SCG ดิบ ว่างอยู่ — ข้ามการดึงข้อมูล');
+        return 0;
       }
-    }
-    if (!matchedUuid) {
-      for (var plNorm in placeNormMap) {
-        if (plNorm.length >= 4 && (normKey.includes(plNorm) || plNorm.includes(normKey))) {
-          matchedUuid = placeNormMap[plNorm];
-          matchedType = 'PLACE';
-          break;
-        }
-      }
-    }
 
-    if (matchedUuid) {
-      aliasRequests.push({
-        masterUuid: matchedUuid,
-        variantName: rawName,
-        entityType: matchedType,
-        confidence: 90,
-        source: 'SCG_RAW_IMPORT'
+      var schemaLen = SCHEMA[SHEET.SOURCE] ? SCHEMA[SHEET.SOURCE].length : 37;
+      var data = sourceSheet.getRange(2, 1, sourceSheet.getLastRow() - 1, schemaLen).getValues();
+
+      var nameCount = {};  // { normalizeName: { rawName, count } }
+      data.forEach(function(r, idx) {
+        if (idx % 500 === 0) ensureAliasMigrationTime_(startTime, 'SCG raw scan row ' + (idx + 1));
+        var rawPersonName = String(r[SRC_IDX.RAW_PERSON_NAME] || '').trim();
+        if (!rawPersonName || rawPersonName.length < 2) return;
+
+        var normKey = normalizeForCompare(rawPersonName);
+        if (!normKey || normKey.length < 2) return;
+
+        if (!nameCount[normKey]) {
+          nameCount[normKey] = { rawName: rawPersonName, count: 0 };
+        }
+        nameCount[normKey].count++;
       });
-    }
-  }
 
-  var aliasCount = createGlobalAliasesBatch_(aliasRequests).length;
-  logInfo('AliasService', 'populateAliasFromSCGRawData: ดึง ' + keys.length + ' ชื่อไม่ซ้ำ → สร้าง ' + aliasCount + ' alias ใหม่');
-  return aliasCount;
+      var allPersons = loadAllPersons_();
+      var personNormMap = {};
+      allPersons.forEach(function(p) {
+        if (p.normalized && p.masterUuid) {
+          personNormMap[p.normalized] = p.masterUuid;
+        }
+      });
+
+      var allPlaces = loadAllPlaces_();
+      var placeNormMap = {};
+      allPlaces.forEach(function(p) {
+        if (p.normalized && p.masterUuid) {
+          placeNormMap[p.normalized] = p.masterUuid;
+        }
+      });
+
+      var aliasRequests = [];
+      var keys = Object.keys(nameCount);
+      for (var k = 0; k < keys.length; k++) {
+        if (k % 100 === 0) ensureAliasMigrationTime_(startTime, 'SCG alias match ' + (k + 1));
+        var normKey = keys[k];
+        var info = nameCount[normKey];
+        var rawName = info.rawName;
+        var matchedUuid = personNormMap[normKey];
+        var matchedType = 'PERSON';
+
+        if (!matchedUuid) {
+          matchedUuid = placeNormMap[normKey];
+          matchedType = 'PLACE';
+        }
+
+        if (!matchedUuid) {
+          for (var pNorm in personNormMap) {
+            if (pNorm.length >= 4 && (normKey.includes(pNorm) || pNorm.includes(normKey))) {
+              matchedUuid = personNormMap[pNorm];
+              matchedType = 'PERSON';
+              break;
+            }
+          }
+        }
+        if (!matchedUuid) {
+          for (var plNorm in placeNormMap) {
+            if (plNorm.length >= 4 && (normKey.includes(plNorm) || plNorm.includes(normKey))) {
+              matchedUuid = placeNormMap[plNorm];
+              matchedType = 'PLACE';
+              break;
+            }
+          }
+        }
+
+        if (matchedUuid) {
+          aliasRequests.push({
+            masterUuid: matchedUuid,
+            variantName: rawName,
+            entityType: matchedType,
+            confidence: 90,
+            source: 'SCG_RAW_IMPORT'
+          });
+        }
+      }
+
+      var aliasCount = createGlobalAliasesBatch_(aliasRequests).length;
+      logInfo('AliasService', 'populateAliasFromSCGRawData: ดึง ' + keys.length + ' ชื่อไม่ซ้ำ → สร้าง ' + aliasCount + ' alias ใหม่');
+      return aliasCount;
+
+  } catch (err) {
+    logError('AliasService', 'populateAliasFromSCGRawData_ ล้มเหลว: ' + err.message, err);
+    try {
+      SpreadsheetApp.getUi().alert('❌ ดึงชื่อจาก SCG ดิบล้มเหลว: ' + err.message);
+    } catch (uiErr) {
+      logWarn('AliasService', 'ไม่สามารถแสดง UI error ได้: ' + uiErr.message);
+    }
+    throw err;
+  }
 }
 
 

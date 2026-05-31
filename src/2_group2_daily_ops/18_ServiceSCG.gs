@@ -213,7 +213,9 @@ function fetchDataFromSCGJWD() {
 
   } catch (e) {  
     console.error("[SCG API Error]: " + e.message);  
+    logError('ServiceSCG', 'fetchDataFromSCGJWD ล้มเหลว: ' + e.message, e);
     ui.alert("❌ เกิดข้อผิดพลาด: " + e.message);  
+    throw e;
   } finally {  
     lock.releaseLock();  
   }  
@@ -267,9 +269,20 @@ function checkIsEPOD(ownerName, invoiceNo) {
  * เรียก runLookupEnrichment จาก 17_SearchService.gs
  */
 function applyMasterCoordinatesToDailyJob() {
-  logInfo('ServiceSCG', 'applyMasterCoordinates → เรียก Module 17');
-  runLookupEnrichment();
-  logInfo('ServiceSCG', 'applyMasterCoordinates เสร็จสิ้น');
+  try {
+      logInfo('ServiceSCG', 'applyMasterCoordinates → เรียก Module 17');
+      runLookupEnrichment();
+      logInfo('ServiceSCG', 'applyMasterCoordinates เสร็จสิ้น');
+
+  } catch (err) {
+    logError('ServiceSCG', 'applyMasterCoordinatesToDailyJob ล้มเหลว: ' + err.message, err);
+    try {
+      SpreadsheetApp.getUi().alert('❌ จับคู่พิกัดล้มเหลว: ' + err.message);
+    } catch (uiErr) {
+      logWarn('ServiceSCG', 'ไม่สามารถแสดง UI error ได้: ' + uiErr.message);
+    }
+    throw err;
+  }
 }
 
 // ============================================================
@@ -370,23 +383,34 @@ function buildShipmentSummary() {
 // ============================================================
 
 function clearAllSCGSheets_UI() {
-  const ui = SpreadsheetApp.getUi();
+  try {
+      const ui = SpreadsheetApp.getUi();
 
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  ss.toast('🗑️ กำลังล้างข้อมูลชีตที่เลือก...', APP_NAME, -1);
+      const ss = SpreadsheetApp.getActiveSpreadsheet();
+      ss.toast('🗑️ กำลังล้างข้อมูลชีตที่เลือก...', APP_NAME, -1);
 
-  let   cleared = 0;
+      let   cleared = 0;
 
-  [SHEET.DAILY_JOB, SHEET.OWNER_SUMMARY, SHEET.SHIPMENT_SUM].forEach(name => {
-    const sheet = ss.getSheetByName(name);
-    if (sheet && sheet.getLastRow() > 1) {
-      sheet.deleteRows(2, sheet.getLastRow() - 1);
-      cleared++;
+      [SHEET.DAILY_JOB, SHEET.OWNER_SUMMARY, SHEET.SHIPMENT_SUM].forEach(name => {
+        const sheet = ss.getSheetByName(name);
+        if (sheet && sheet.getLastRow() > 1) {
+          sheet.deleteRows(2, sheet.getLastRow() - 1);
+          cleared++;
+        }
+      });
+
+      logInfo('ServiceSCG', `clearAllSCGSheets_UI: ล้าง ${cleared} ชีต`);
+      ui.alert(`✅ ล้างข้อมูล ${cleared} ชีตเรียบร้อย`);
+
+  } catch (err) {
+    logError('ServiceSCG', 'clearAllSCGSheets_UI ล้มเหลว: ' + err.message, err);
+    try {
+      SpreadsheetApp.getUi().alert('❌ ล้างข้อมูล SCG ล้มเหลว: ' + err.message);
+    } catch (uiErr) {
+      logWarn('ServiceSCG', 'ไม่สามารถแสดง UI error ได้: ' + uiErr.message);
     }
-  });
-
-  logInfo('ServiceSCG', `clearAllSCGSheets_UI: ล้าง ${cleared} ชีต`);
-  ui.alert(`✅ ล้างข้อมูล ${cleared} ชีตเรียบร้อย`);
+    throw err;
+  }
 }
 
 function clearDailyJobLatLng() {

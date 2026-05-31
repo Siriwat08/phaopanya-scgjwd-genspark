@@ -202,7 +202,7 @@ function flushBatches_(factBatch, reviewBatch, successRows, failedRows) {
 
     // [UPGRADE v5.2.005] ระบายสีแถว Q_REVIEW ตาม issue_type
     const backgrounds = reviewBatch.map(row => {
-      const issueType = String(row[1] || '').trim(); // index 1 คือ issue_type
+      const issueType = String(row[REVIEW_IDX.ISSUE_TYPE] || '').trim();
       let color = null; // null คือล้างสี / ปล่อยเป็นสีตั้งต้น
       if (issueType === 'GEO_NEARBY_YELLOW') color = '#fff2cc';
       else if (issueType === 'GEO_NEARBY_ORANGE') color = '#fce5cd';

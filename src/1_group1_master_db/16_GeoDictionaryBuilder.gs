@@ -72,80 +72,94 @@
 // SECTION 1: buildGeoDictionary — Entry Point
 // ============================================================
 
+
 function buildGeoDictionary() {
-  const ss    = SpreadsheetApp.getActiveSpreadsheet();
-  const sheet = ss.getSheetByName(SHEET.SYS_TH_GEO);
+  try {
+    const ss    = SpreadsheetApp.getActiveSpreadsheet();
+    const sheet = ss.getSheetByName(SHEET.SYS_TH_GEO);
 
-  if (!sheet || sheet.getLastRow() < 2) {
-    logWarn('GeoDictBuilder', 'SYS_TH_GEO ว่างอยู่');
-    safeAlert_('⚠️ SYS_TH_GEO ยังไม่มีข้อมูล\nกรุณา Import ข้อมูลภูมิศาสตร์ไทยก่อน');
-    return;
-  }
-
-  logInfo('GeoDictBuilder', 'เริ่มสร้าง Geo Dictionary');
-
-  const colsToRead = SCHEMA[SHEET.SYS_TH_GEO].length;
-  const totalRows  = sheet.getLastRow() - 1;
-  const allData    = sheet.getRange(2, 1, totalRows, colsToRead).getValues();
-
-  const postcodeMap  = {};
-  const provinceSet  = new Set();
-  const districtMap  = {};
-
-  allData.forEach(row => {
-    const postcode   = String(row[TH_GEO_IDX.POSTCODE]     || '').trim().padStart(5, '0');
-    const subDistrict= String(row[TH_GEO_IDX.SUB_DISTRICT] || '').trim();
-    const district   = String(row[TH_GEO_IDX.DISTRICT]     || '').trim();
-    const province   = String(row[TH_GEO_IDX.PROVINCE]     || '').trim();
-
-    if (!province) return;
-
-    // [UPGRADE v5.2.008] Cache full row data for ThGeoService
-    if (postcode && postcode !== '00000' && !postcodeMap[postcode]) {
-      postcodeMap[postcode] = {
-        province, district, subDistrict,
-        searchKey: row[TH_GEO_IDX.SEARCH_KEY] || '',
-        postalKey: row[TH_GEO_IDX.POSTAL_KEY] || '',
-        noteType:  row[TH_GEO_IDX.NOTE_TYPE]  || 'FULL_AREA'
-      };
+    if (!sheet || sheet.getLastRow() < 2) {
+      logWarn('GeoDictBuilder', 'SYS_TH_GEO ว่างอยู่');
+      safeAlert_('⚠️ SYS_TH_GEO ยังไม่มีข้อมูล\nกรุณา Import ข้อมูลภูมิศาสตร์ไทยก่อน');
+      return;
     }
 
-    provinceSet.add(province);
+    const startTime = new Date();
+    const timeLimitMs = Math.max(60000, (AI_CONFIG.TIME_LIMIT_MS || 300000) - 30000);
+    logInfo('GeoDictBuilder', 'เริ่มสร้าง Geo Dictionary');
 
-    if (!districtMap[province]) districtMap[province] = new Set();
-    if (district) districtMap[province].add(district);
-  });
+    const colsToRead = SCHEMA[SHEET.SYS_TH_GEO].length;
+    const totalRows  = sheet.getLastRow() - 1;
+    const allData    = sheet.getRange(2, 1, totalRows, colsToRead).getValues();
 
-  const districtMapArr = {};
-  Object.keys(districtMap).forEach(prov => {
-    districtMapArr[prov] = [...districtMap[prov]];
-  });
+    const postcodeMap  = {};
+    const provinceSet  = new Set();
+    const districtMap  = {};
 
-  const cache = CacheService.getScriptCache();
+    for (let i = 0; i < allData.length; i++) {
+      if (i % 100 === 0 && new Date() - startTime > timeLimitMs) {
+        throw new Error('Time Guard: buildGeoDictionary หยุดที่แถว ' + (i + 2) + '/' + (totalRows + 1));
+      }
 
-  savePostcodeMapToCache_(postcodeMap);
-  _GLOBAL_GEO_DICT_CACHE = null; // [FIX v5.2.009] ล้าง RAM Cache เมื่อมีการ rebuild ใหม่
+      const row = allData[i];
+      const postcode   = String(row[TH_GEO_IDX.POSTCODE]     || '').trim().padStart(5, '0');
+      const subDistrict= String(row[TH_GEO_IDX.SUB_DISTRICT] || '').trim();
+      const district   = String(row[TH_GEO_IDX.DISTRICT]     || '').trim();
+      const province   = String(row[TH_GEO_IDX.PROVINCE]     || '').trim();
 
-  try {
-    cache.put('TH_GEO_PROVINCES', JSON.stringify([...provinceSet]), AI_CONFIG.CACHE_TTL_SEC);
-  } catch (e) {
-    logWarn('GeoDictBuilder', `Cache PROVINCES ล้มเหลว: ${e.message}`);
+      if (!province) continue;
+
+      // [UPGRADE v5.2.008] Cache full row data for ThGeoService
+      if (postcode && postcode !== '00000' && !postcodeMap[postcode]) {
+        postcodeMap[postcode] = {
+          province, district, subDistrict,
+          searchKey: row[TH_GEO_IDX.SEARCH_KEY] || '',
+          postalKey: row[TH_GEO_IDX.POSTAL_KEY] || '',
+          noteType:  row[TH_GEO_IDX.NOTE_TYPE]  || 'FULL_AREA'
+        };
+      }
+
+      provinceSet.add(province);
+
+      if (!districtMap[province]) districtMap[province] = new Set();
+      if (district) districtMap[province].add(district);
+    }
+
+    const districtMapArr = {};
+    Object.keys(districtMap).forEach(prov => {
+      districtMapArr[prov] = [...districtMap[prov]];
+    });
+
+    const cache = CacheService.getScriptCache();
+
+    savePostcodeMapToCache_(postcodeMap);
+    _GLOBAL_GEO_DICT_CACHE = null; // [FIX v5.2.009] ล้าง RAM Cache เมื่อมีการ rebuild ใหม่
+
+    try {
+      cache.put('TH_GEO_PROVINCES', JSON.stringify([...provinceSet]), AI_CONFIG.CACHE_TTL_SEC);
+    } catch (e) {
+      logWarn('GeoDictBuilder', `Cache PROVINCES ล้มเหลว: ${e.message}`);
+    }
+
+    try {
+      cache.put('TH_GEO_DISTRICTS', JSON.stringify(districtMapArr), AI_CONFIG.CACHE_TTL_SEC);
+    } catch (e) {
+      logWarn('GeoDictBuilder', `Cache DISTRICTS ล้มเหลว: ${e.message}`);
+    }
+
+    logInfo('GeoDictBuilder', `สร้าง Dictionary เสร็จ — ${totalRows} แถว ${provinceSet.size} จังหวัด ${Object.keys(postcodeMap).length} ไปรษณีย์`);
+
+    safeAlert_(
+      `✅ สร้าง Geo Dictionary เสร็จ!\n\n` +
+      `  จำนวนแถว:     ${totalRows}\n` +
+      `  จังหวัด:       ${provinceSet.size}\n` +
+      `  รหัสไปรษณีย์: ${Object.keys(postcodeMap).length}`
+    );
+  } catch (err) {
+    logError('GeoDictBuilder', 'buildGeoDictionary ล้มเหลว: ' + err.message, err);
+    safeAlert_('❌ สร้าง Geo Dictionary ล้มเหลว: ' + err.message);
+    throw err;
   }
-
-  try {
-    cache.put('TH_GEO_DISTRICTS', JSON.stringify(districtMapArr), AI_CONFIG.CACHE_TTL_SEC);
-  } catch (e) {
-    logWarn('GeoDictBuilder', `Cache DISTRICTS ล้มเหลว: ${e.message}`);
-  }
-
-  logInfo('GeoDictBuilder', `สร้าง Dictionary เสร็จ — ${totalRows} แถว ${provinceSet.size} จังหวัด ${Object.keys(postcodeMap).length} ไปรษณีย์`);
-
-  safeAlert_(
-    `✅ สร้าง Geo Dictionary เสร็จ!\n\n` +
-    `  จำนวนแถว:     ${totalRows}\n` +
-    `  จังหวัด:       ${provinceSet.size}\n` +
-    `  รหัสไปรษณีย์: ${Object.keys(postcodeMap).length}`
-  );
 }
 
 // ============================================================

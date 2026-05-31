@@ -99,66 +99,82 @@ function extractGeoFromAddress(rawText) {
  * รันฟังก์ชันนี้ "ครั้งเดียว" หลังจากเพิ่มคอลัมน์ F-P ในชีต SYS_TH_GEO แล้ว
  * เพื่อเติมข้อมูลอัตโนมัติ
  */
+
 function populateGeoMetadata() {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const sheet = ss.getSheetByName(SHEET.SYS_TH_GEO);
-  if (!sheet) return;
+  try {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const sheet = ss.getSheetByName(SHEET.SYS_TH_GEO);
+    if (!sheet) return;
 
-  const data = sheet.getDataRange().getValues();
-  const headers = data[0];
-  const rows = data.slice(1);
-  
-  logInfo('GeoMigration', `เริ่มเติมข้อมูล Metadata — ${rows.length} แถว`);
+    const startTime = new Date();
+    const timeLimitMs = Math.max(60000, (AI_CONFIG.TIME_LIMIT_MS || 300000) - 30000);
+    const data = sheet.getDataRange().getValues();
+    const rows = data.slice(1);
 
-  const updatedRows = rows.map(row => {
-    const post = String(row[TH_GEO_IDX.POSTCODE] || '').trim();
-    const sub  = String(row[TH_GEO_IDX.SUB_DISTRICT] || '').trim();
-    const dist = String(row[TH_GEO_IDX.DISTRICT] || '').trim();
-    const prov = String(row[TH_GEO_IDX.PROVINCE] || '').trim();
+    logInfo('GeoMigration', `เริ่มเติมข้อมูล Metadata — ${rows.length} แถว`);
 
-    // 1. Clean (ตัด prefix)
-    const subC = sub.replace(/แขวง|ตำบล|ต\.|ข\./g, '').trim();
-    const distC = dist.replace(/เขต|อำเภอ|อ\.|ข\./g, '').trim();
+    const updatedRows = [];
+    for (let i = 0; i < rows.length; i++) {
+      if (i % 100 === 0 && new Date() - startTime > timeLimitMs) {
+        throw new Error('Time Guard: populateGeoMetadata หยุดที่แถว ' + (i + 2) + '/' + data.length);
+      }
 
-    // 2. Label
-    const subL = sub.includes('แขวง') ? 'แขวง' : 'ตำบล';
-    const distL = dist.includes('เขต') ? 'เขต' : 'อำเภอ';
+      const row = rows[i];
+      const post = String(row[TH_GEO_IDX.POSTCODE] || '').trim();
+      const sub  = String(row[TH_GEO_IDX.SUB_DISTRICT] || '').trim();
+      const dist = String(row[TH_GEO_IDX.DISTRICT] || '').trim();
+      const prov = String(row[TH_GEO_IDX.PROVINCE] || '').trim();
 
-    // 3. Normalized
-    const subN = normalizeForCompare(subC);
-    const distN = normalizeForCompare(distC);
-    const provN = normalizeForCompare(prov);
+      // 1. Clean (ตัด prefix)
+      const subC = sub.replace(/แขวง|ตำบล|ต\.|ข\./g, '').trim();
+      const distC = dist.replace(/เขต|อำเภอ|อ\.|ข\./g, '').trim();
 
-    // 4. Keys
-    const searchKey = `${subN}|${distN}|${provN}`;
-    const postalKey = `${post}|${subN}`;
+      // 2. Label
+      const subL = sub.includes('แขวง') ? 'แขวง' : 'ตำบล';
+      const distL = dist.includes('เขต') ? 'เขต' : 'อำเภอ';
 
-    // 5. Note Classification (เบื้องต้น)
-    let nType = 'FULL_AREA';
-    let nScope = 'FULL';
-    const note = String(row[TH_GEO_IDX.NOTE] || '');
-    if (note.includes('ยกเว้น') || note.includes('เฉพาะ')) {
-      nType = 'CHECK_NOTE';
-      nScope = 'PARTIAL';
+      // 3. Normalized
+      const subN = normalizeForCompare(subC);
+      const distN = normalizeForCompare(distC);
+      const provN = normalizeForCompare(prov);
+
+      // 4. Keys
+      const searchKey = `${subN}|${distN}|${provN}`;
+      const postalKey = `${post}|${subN}`;
+
+      // 5. Note Classification (เบื้องต้น)
+      let nType = 'FULL_AREA';
+      let nScope = 'FULL';
+      const note = String(row[TH_GEO_IDX.NOTE] || '');
+      if (note.includes('ยกเว้น') || note.includes('เฉพาะ')) {
+        nType = 'CHECK_NOTE';
+        nScope = 'PARTIAL';
+      }
+
+      // เติมลงคอลัมน์ F-P (Index 5-15)
+      row[TH_GEO_IDX.SUB_DISTRICT_CLEAN] = subC;
+      row[TH_GEO_IDX.DISTRICT_CLEAN]     = distC;
+      row[TH_GEO_IDX.SUB_DISTRICT_LABEL] = subL;
+      row[TH_GEO_IDX.DISTRICT_LABEL]     = distL;
+      row[TH_GEO_IDX.TAMBON_NORM]        = subN;
+      row[TH_GEO_IDX.AMPHOE_NORM]        = distN;
+      row[TH_GEO_IDX.PROVINCE_NORM]      = provN;
+      row[TH_GEO_IDX.SEARCH_KEY]         = searchKey;
+      row[TH_GEO_IDX.POSTAL_KEY]         = postalKey;
+      row[TH_GEO_IDX.NOTE_TYPE]          = nType;
+      row[TH_GEO_IDX.NOTE_SCOPE]         = nScope;
+
+      updatedRows.push(row);
     }
 
-    // เติมลงคอลัมน์ F-P (Index 5-15)
-    row[TH_GEO_IDX.SUB_DISTRICT_CLEAN] = subC;
-    row[TH_GEO_IDX.DISTRICT_CLEAN]     = distC;
-    row[TH_GEO_IDX.SUB_DISTRICT_LABEL] = subL;
-    row[TH_GEO_IDX.DISTRICT_LABEL]     = distL;
-    row[TH_GEO_IDX.TAMBON_NORM]        = subN;
-    row[TH_GEO_IDX.AMPHOE_NORM]        = distN;
-    row[TH_GEO_IDX.PROVINCE_NORM]      = provN;
-    row[TH_GEO_IDX.SEARCH_KEY]         = searchKey;
-    row[TH_GEO_IDX.POSTAL_KEY]         = postalKey;
-    row[TH_GEO_IDX.NOTE_TYPE]          = nType;
-    row[TH_GEO_IDX.NOTE_SCOPE]         = nScope;
-
-    return row;
-  });
-
-  sheet.getRange(2, 1, updatedRows.length, updatedRows[0].length).setValues(updatedRows);
-  logInfo('GeoMigration', 'เติมข้อมูล Metadata เสร็จสิ้น!');
-  safeAlert_('✅ เติมข้อมูล Geo Metadata สำเร็จ!\nกรุณากด "สร้าง Geo Dictionary" อีกครั้งเพื่อใช้งาน');
+    if (updatedRows.length > 0) {
+      sheet.getRange(2, 1, updatedRows.length, updatedRows[0].length).setValues(updatedRows);
+    }
+    logInfo('GeoMigration', 'เติมข้อมูล Metadata เสร็จสิ้น!');
+    safeAlert_('✅ เติมข้อมูล Geo Metadata สำเร็จ!\nกรุณากด "สร้าง Geo Dictionary" อีกครั้งเพื่อใช้งาน');
+  } catch (err) {
+    logError('GeoMigration', 'populateGeoMetadata ล้มเหลว: ' + err.message, err);
+    safeAlert_('❌ เติมข้อมูล Geo Metadata ล้มเหลว: ' + err.message);
+    throw err;
+  }
 }
