@@ -272,9 +272,8 @@ function getFromSheetCache_(cacheKey) {
   for (let i = 0; i < data.length; i++) {
     if (String(data[i][MAPS_CACHE_IDX.CACHE_KEY]).trim() !== cacheKey) continue;
 
-    const nextHitCount = Number(data[i][MAPS_CACHE_IDX.HIT_COUNT] || 0) + 1;
-    sheet.getRange(i + 2, MAPS_CACHE_IDX.HIT_COUNT + 1, 1, 1)
-         .setValues([[nextHitCount]]);
+    // [FIX v5.4.003] Keep cache lookup read-only; hit count writes are intentionally
+    // skipped here to avoid Spreadsheet writes inside high-frequency lookup loops.
 
     // [FIX v003] คืน province + district ด้วย
     return {
